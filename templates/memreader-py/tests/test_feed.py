@@ -42,3 +42,12 @@ def test_read_state_builds_entities_and_stats():
         entities, stats = read_state(p, config)
     assert entities == [{"id": "player", "kind": "player", "x": 10.0, "y": -20.0, "heading": 90.0, "label": "me"}]
     assert stats == {"hp": 55}
+
+
+def test_read_value_f64_for_ue5_positions():
+    target = buf("<ddd", 1234.5, -9876.25, 42.0)   # an FVector of doubles
+    a = ctypes.addressof(target)
+    with Process(os.getpid()) as p:
+        assert read_value(p, 0, [a], "f64") == 1234.5
+        assert read_value(p, 0, [a + 8], "f64") == -9876.25
+        assert p.read_f64(a + 16) == 42.0

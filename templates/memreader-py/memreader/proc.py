@@ -107,6 +107,9 @@ class Process:
     def read_f32(self, addr: int) -> float:
         return struct.unpack("<f", self.read(addr, 4))[0]
 
+    def read_f64(self, addr: int) -> float:
+        return struct.unpack("<d", self.read(addr, 8))[0]
+
     def follow(self, base: int, offsets: list[int]) -> int:
         addr = base
         for off in offsets[:-1]:

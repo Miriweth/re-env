@@ -26,7 +26,7 @@ CONFIG = {
         "x": [0x0, 0x0],            # replace: chain to the player's x
         "y": [0x0, 0x4],
         "heading": None,            # chain to a heading in degrees, or None
-        "type": "f32",
+        "type": "f32",              # f64 for Unreal Engine 5 (positions are doubles)
         "label": "me",
     },
     "stats": {                      # name -> {"module":..,"chain":[..],"type":..}
@@ -35,7 +35,7 @@ CONFIG = {
     "rate": 10,                     # packets per second
 }
 
-READERS = {"f32": "read_f32", "u32": "read_u32", "u64": "read_u64"}
+READERS = {"f32": "read_f32", "f64": "read_f64", "u32": "read_u32", "u64": "read_u64"}
 
 
 def read_value(proc: Process, base: int, chain: list[int], type: str = "f32"):

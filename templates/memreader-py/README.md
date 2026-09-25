@@ -48,6 +48,21 @@ If sidehud shows the map tile with the fake marker, the pipeline works and only
 the offsets are left. `memreader/sidehud.py` has `build_packet` and `Sender`
 for your own scripts.
 
+## Finding addresses
+
+```
+uv run find_offset.py position          # float64 that changes when you move (Unreal 5)
+uv run find_offset.py position --type float32
+uv run find_offset.py value 45          # a float32 you can read on the HUD
+```
+
+`find_offset.py` drives scanmem through `libscanmem` (package `libscanmem`,
+pulled in by `scanmem`). It takes a snapshot, then keeps only the addresses
+that stayed the same while you stood still and changed while you moved, until
+a handful remain. It prints them with their neighbouring values (the other
+axes) and a `CONFIG` snippet. `memreader/scanner.py` is the class behind it if
+you want your own narrowing logic.
+
 ## Notes
 
 The module name is the file name as it appears in `/proc/<pid>/maps`

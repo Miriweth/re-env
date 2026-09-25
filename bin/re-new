@@ -18,7 +18,7 @@ Started $(date +%F).
 
 ## Binary
 
-Path, version, engine, anti-cheat check (see docs/anti-cheat.md).
+Path, version, engine.
 
 ## Findings
 

@@ -16,9 +16,8 @@ Things you can ask for, in your own words:
 - "Build a version.dll mod for <game> that hooks the function that applies fall damage."
 - "Decompile Assembly-CSharp of <game> and find the save routine."
 
-Claude then does the rounds on its own: finds the game and its app id, checks the
-folder for anti-cheat and asks you yes or no before going on if it finds some,
-creates `~/re/targets/<game>/`,
+Claude then does the rounds on its own: finds the game and its app id, creates
+`~/re/targets/<game>/`,
 works out the engine, opens the binary in Ghidra over MCP or the assemblies with
 ILSpy, digs for the values, builds from a template, tests what it built, and
 writes everything it learned into `targets/<game>/notes.md`. Bulk work goes to the
@@ -27,8 +26,10 @@ local models, so the API is not burned on two hundred functions.
 Two things it cannot do without you:
 
 1. Start the game. It will tell you when.
-2. Change a value in the game when it is narrowing down an address. "Take some
-   damage now", "pick up a coin", "walk east". It watches memory while you play.
+2. Act in the game when it is narrowing down an address: stand still, move,
+   take damage, read a number off the HUD. `find_offset.py` in the feed folder
+   does the scanning and only asks you to press Enter at the right moments; you
+   can run it yourself without Claude.
 
 And once, after install: start Ghidra, File > Configure > Developer, tick
 Ghydra. Without that Claude cannot see into Ghidra.
@@ -45,10 +46,10 @@ uv run feed.py
 ```
 
 Games without any mod support get their minimap the same way: the feed reads
-the player position straight out of the game's memory, no mod involved. Claude
-finds the position with you at the controller ("walk east", "walk west"), turns
-it into an address that survives a restart, and calibrates a map image from two
-spots you stand on. A screenshot of the in-game map is enough to start with;
+the player position straight out of the game's memory, no mod involved.
+`uv run find_offset.py position` finds it with you at the controller (stand
+still, move, stand still), `uv run find_offset.py value 45` finds a stat you can
+read on the HUD, and the map image is calibrated from two spots you stand on. A screenshot of the in-game map is enough to start with;
 without an image the phone draws a grid.
 
 Panels for the phone (the game's own numbers next to the map) live in the

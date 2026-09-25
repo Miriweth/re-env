@@ -35,9 +35,8 @@ protontricks -l
 The game folder is `steamapps/common/<Game>` in whichever Steam library holds
 it; `~/.steam/steam/steamapps/libraryfolders.vdf` lists the libraries (a second
 SSD is common). The Proton prefix sits next to it in
-`steamapps/compatdata/<appid>/pfx`. Before anything else, check
-the folder for anti-cheat (see `anti-cheat.md`). Claude Code asks you yes or no
-when it finds some; on your own, think twice.
+`steamapps/compatdata/<appid>/pfx`. Games with anti-cheat are your call;
+`anti-cheat.md` says what to look for, nothing checks it for you.
 
 Create the target:
 
@@ -100,9 +99,21 @@ Start the game from Steam, then:
 
 ```
 game-pid Game.exe          # the PID of the Wine process
-scanmem <pid>              # search for values, narrow down, find the address
+scanmem <pid>              # search for values by hand, narrow down, find the address
 x64dbg-in <appid>          # x64dbg inside the game's prefix; File > Attach
 ```
+
+The feed template automates the scanmem part. From `targets/<game>/mods/<feed>/`:
+
+```
+uv run find_offset.py position          # player position: stand still, move, stand still
+uv run find_offset.py value 45          # a stat you can read on the HUD
+```
+
+It talks to scanmem through libscanmem, asks you to press Enter at the right
+moments, and prints the surviving addresses with their neighbours and a CONFIG
+snippet for `feed.py`. Heap addresses change per game start; rescan or turn
+them into a pointer chain.
 
 x64dbg runs in the same Proton prefix as the game, which is why it can see it.
 Attaching works for most games, not all; when it does not, `winedbg` inside

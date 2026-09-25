@@ -32,12 +32,8 @@ the two things below. Order of work:
    `steamapps/common/<Game>` inside one of the Steam library folders listed in
    `~/.steam/steam/steamapps/libraryfolders.vdf` (on this machine that includes
    `/mnt/SSD1/Steam`), the Proton prefix is
-   `<library>/steamapps/compatdata/<appid>/pfx`. Then the exe. Check the folder against
-   `docs/anti-cheat.md`. If you find anti-cheat, do not decide yourself: name
-   what you found and ask one yes/no question, "This game runs <name>; a
-   debugger, injected DLL or memory reader can get the account banned.
-   Continue anyway? yes/no". No means stop. Yes means go on, and say in
-   `notes.md` that the user chose to.
+   `<library>/steamapps/compatdata/<appid>/pfx`. Then the exe. There is no
+   anti-cheat check; folder markers are unreliable and the user decides.
 2. `re-new <game>`, then engine: `*_Data/Managed/Assembly-CSharp.dll` is Unity
    Mono (ILSpy, BepInEx), `GameAssembly.dll` is IL2CPP (`il2cppdumper`, then
    Ghidra), `Binaries/Win64/*-Shipping.exe` is Unreal (UE4SS, see
@@ -47,9 +43,11 @@ the two things below. Order of work:
    HUD drawing, movement) and follow the pointer chain back to a static base
    in the module. Ask `ask-local` to pre-sort large batches.
 4. Dynamic when static does not settle it. Ask the user to start the game, run
-   `llm-off` before that. Then `game-pid`, and either `scanmem <pid>` or the
-   memreader scan; ask the user to change the value ("take damage now") and
-   narrow down. Convert every found address into module + RVA or a pointer
+   `llm-off` before that. Then, from the game's `mods/<feed>/` folder,
+   `uv run find_offset.py position` for the player position or
+   `uv run find_offset.py value <hud value>` for a stat; it drives scanmem and
+   only asks the user to stand still, move, or read the HUD. It prints a
+   CONFIG snippet at the end. Convert every found address into module + RVA or a pointer
    chain from the module base; absolute addresses die with the next launch.
 5. Build from a template with `re-new <game> <template> <name>`. For a sidehud
    feed that is `memreader-py`: fill `CONFIG` in `feed.py` (exe, module, chains,
@@ -60,13 +58,12 @@ the two things below. Order of work:
 
    A minimap for a game without any mod support is the memory reader's main
    job. The recipe:
-   - Position: the player's x and y are usually two adjacent floats (or
-     doubles). With the game running, `scanmem <pid>`: "unknown float", then
-     ask the user to walk east and search "increased", walk west and
-     "decreased", stand still and "unchanged", until a handful of addresses
-     remain; the neighbour four bytes away is the other axis. Or find the
-     movement code in Ghidra and take the chain from there. Heading is often a
-     float in radians or degrees next to them, or a direction vector.
+   - Position: `uv run find_offset.py position` (float64 for Unreal 5,
+     `--type float32` for most other engines) narrows the address down while
+     the user alternates standing still and moving; the neighbouring values it
+     prints are the other axes. Heading is often a float in radians or degrees
+     next to them, or a direction vector. Or find the movement code in Ghidra
+     and take the chain from there.
    - Chain: turn the address into module + RVA (static) or a pointer chain from
      a static base (`scanmem`'s pointer scan, or Ghidra: who writes this
      address, where does that pointer come from). Prove it survives a restart.
@@ -132,8 +129,8 @@ Run `llm-off` before starting a game. The game and the model share the VRAM.
 
 ## Rules
 
-Only games you own, only single player or offline. No debugger, injection or
-memory access on games with anti-cheat (EasyAntiCheat, BattlEye, Vanguard,
-Ricochet); that gets accounts banned. How to spot them:
-`~/Projects/re-env/docs/anti-cheat.md`. No network protocol work for online
+Only games you own, only single player or offline. Games with anti-cheat can
+ban the account for a debugger, an injected DLL or a memory reader; what that
+looks like is in `~/Projects/re-env/docs/anti-cheat.md`, the decision is the
+user's and nothing checks it automatically. No network protocol work for online
 advantages.

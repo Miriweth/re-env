@@ -114,7 +114,8 @@ check_x64dbg() {
 check_memory() {
     local scope; scope="$(sysctl -n kernel.yama.ptrace_scope 2>/dev/null)"
     [[ "$scope" == "0" ]] || { echo "ptrace_scope is $scope, needs 0 (run ./setup.sh system)"; return 2; }
-    scanmem --version >/dev/null 2>&1 || { echo "scanmem missing"; return 2; }
+    # scanmem prints its version but exits 1, so check the output
+    [[ "$(scanmem --version 2>&1)" == *"scanmem version"* ]] || { echo "scanmem missing"; return 2; }
     local f; f="$(frida --version 2>/dev/null)" || { echo "frida missing (run ./setup.sh user:tools)"; return 2; }
     echo "ptrace_scope 0, scanmem, frida $f"
 }

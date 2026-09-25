@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# re-new GAME [TEMPLATE [MODNAME]] — create a target folder, optionally with a mod from a template.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+[[ $# -ge 1 && $# -le 3 ]] || usage_die "usage: re-new GAME [TEMPLATE [MODNAME]]"
+game="$1" template="${2:-}" modname="${3:-${2:-}}"
+target="$RE_HOME/targets/$game"
+
+mkdir -p "$target"/{ghidra,dumps,mods}
+if [[ ! -f "$target/notes.md" ]]; then
+    cat > "$target/notes.md" <<NOTES
+# $game
+
+Started $(date +%F).
+
+## Binary
+
+Path, version, engine, anti-cheat check (see docs/anti-cheat.md).
+
+## Findings
+
+Address, RVA, name, how you know.
+
+## Offsets
+
+Pointer chains and patterns that tools and mods rely on.
+
+## Mods
+
+What lives in mods/ and how it is installed.
+NOTES
+fi
+echo "$target"
+
+[[ -n "$template" ]] || exit 0
+src="$RE_ENV/templates/$template"
+if [[ ! -d "$src" ]]; then
+    echo "error: unknown template '$template'. Available:" >&2
+    ls "$RE_ENV/templates" >&2
+    exit 2
+fi
+dest="$target/mods/$modname"
+[[ -e "$dest" ]] && die "$dest already exists"
+mkdir -p "$dest"
+# copy the template without build output or virtualenvs
+(cd "$src" && find . -mindepth 1 \
+    \( -name build -o -name target -o -name .venv -o -name bin -o -name obj -o -name __pycache__ -o -name .pytest_cache \) -prune -o \
+    -print0 | cpio -0pdm --quiet "$dest")
+echo "$dest"

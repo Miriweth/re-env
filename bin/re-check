@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# re-check [--full] [--gamedir PATH] [--only NAME[,NAME...]] — verify the re-env installation.
+# One line per check: PASS/WARN/FAIL, name, message. Exit 1 if anything FAILs.
+set -uo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+CHECKS=(gpu ollama anthropic ollamaconf claude ghidra mcp dotnet x64dbg memory mingw rust bepinex imhex workspace)
+FULL=0 GAMEDIR="" ONLY=""
+
+usage() {
+    cat <<USAGE
+usage: re-check [--full] [--gamedir PATH] [--only NAME[,NAME...]]
+
+  --full          also build the rust template and the bepinex plugin (slow)
+  --gamedir PATH  with --full: build the bepinex plugin against this game
+  --only NAMES    run only these checks, in this order
+
+checks: ${CHECKS[*]}
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --full) FULL=1 ;;
+        --gamedir) GAMEDIR="${2:-}"; shift ;;
+        --only) ONLY="${2:-}"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage >&2; usage_die "unknown option: $1" ;;
+    esac
+    shift
+done
+
+MODELS=(qwen2.5-coder:14b deepseek-coder-v2:16b llama3.1:8b)
+
+check_gpu() {
+    local name
+    name="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)"
+    [[ -n "$name" ]] || { echo "nvidia-smi does not answer"; return 2; }
+    echo "$name"
+}
+
+check_ollama() {
+    systemctl is-active --quiet ollama || { echo "ollama.service is not active (run ./setup.sh system)"; return 2; }
+    local tags missing=() m
+    tags="$(curl -sf -m 5 "$OLLAMA_URL/api/tags")" || { echo "no answer from $OLLAMA_URL"; return 2; }
+    for m in "${MODELS[@]}"; do grep -q "\"$m\"" <<<"$tags" || missing+=("$m"); done
+    ((${#missing[@]} == 0)) || { echo "missing models: ${missing[*]} (run ./setup.sh user:models)"; return 2; }
+    echo "service active, ${#MODELS[@]} models present"
+}
+
+check_anthropic() {
+    local resp
+    resp="$(curl -sf -m 180 "$OLLAMA_URL/v1/messages" \
+        -H 'content-type: application/json' -H 'x-api-key: ollama' -H 'anthropic-version: 2023-06-01' \
+        -d '{"model":"llama3.1:8b","max_tokens":8,"messages":[{"role":"user","content":"ok"}]}')" \
+        || { echo "POST /v1/messages failed"; return 2; }
+    grep -q '"type":"message"' <<<"$resp" || { echo "unexpected answer from /v1/messages"; return 2; }
+    if ollama ps 2>/dev/null | awk 'NR > 1 && $1 == "llama3.1:8b"' | grep -q GPU; then
+        echo "/v1/messages answers, llama3.1:8b runs on the GPU"
+    else
+        echo "/v1/messages answers, but llama3.1:8b runs on the CPU"; return 1
+    fi
+}
+
+check_ollamaconf() {
+    [[ -f /etc/systemd/system/ollama.service.d/re-env.conf ]] || { echo "drop-in missing (run ./setup.sh system)"; return 2; }
+    systemctl show ollama -p Environment | grep -q 'OLLAMA_CONTEXT_LENGTH=32768' \
+        || { echo "drop-in present but not active (systemctl daemon-reload && systemctl restart ollama)"; return 2; }
+    echo "32K context, flash attention, q8 KV cache"
+}
+
+check_claude() {
+    local v; v="$(claude --version 2>/dev/null)" || { echo "claude CLI missing (run ./setup.sh user:tools)"; return 2; }
+    echo "$v"
+}
+
+check_ghidra() {
+    [[ -x /opt/ghidra/support/analyzeHeadless ]] || { echo "/opt/ghidra missing (pacman -S ghidra)"; return 2; }
+    local props="$(ghidra_user_dir)/Extensions/Ghydra/extension.properties" have want
+    [[ -f "$props" ]] || { echo "Ghydra extension missing (run ./setup.sh user:downloads)"; return 2; }
+    have="$(sed -n 's/^ghidraVersion=//p' "$props")"; want="$(ghidra_version)"
+    [[ "$have" == "$want" ]] || { echo "Ghidra $want but Ghydra built for $have (update versions.env)"; return 1; }
+    echo "Ghidra $want with Ghydra $have"
+}
+
+check_mcp() {
+    local bridge="$RE_HOME/tools/ghydra/bridge_mcp_hydra.py" out
+    [[ -f "$bridge" ]] || { echo "bridge missing (run ./setup.sh user:downloads)"; return 2; }
+    out="$(printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"re-check","version":"0"}}}' \
+        | timeout 60 uv run "$bridge" 2>/dev/null)"
+    grep -q serverInfo <<<"$out" || { echo "bridge does not answer an MCP initialize"; return 2; }
+    if curl -sf -m 2 http://localhost:8192/ >/dev/null 2>&1; then
+        echo "bridge answers, Ghidra listening on 8192"
+    else
+        echo "bridge answers, Ghidra not started (port 8192 closed)"; return 1
+    fi
+}
+
+check_dotnet() {
+    local d i u
+    d="$(dotnet --version 2>/dev/null)" || { echo "dotnet missing"; return 2; }
+    i="$(ilspycmd --version 2>/dev/null | head -1)" || { echo "ilspycmd missing (run ./setup.sh user:tools)"; return 2; }
+    u="$(timeout 20 il2cppdumper </dev/null 2>&1 | head -c 2000)"
+    [[ -n "$u" ]] || { echo "il2cppdumper prints nothing"; return 2; }
+    echo "dotnet $d, $i, il2cppdumper ok"
+}
+
+check_x64dbg() {
+    [[ -f "$RE_HOME/tools/x64dbg/release/x64/x64dbg.exe" ]] || { echo "x64dbg missing (run ./setup.sh user:downloads)"; return 2; }
+    local p; p="$(protontricks --version 2>/dev/null | head -1)" || { echo "protontricks missing"; return 2; }
+    echo "x64dbg present, $p"
+}
+
+check_memory() {
+    local scope; scope="$(sysctl -n kernel.yama.ptrace_scope 2>/dev/null)"
+    [[ "$scope" == "0" ]] || { echo "ptrace_scope is $scope, needs 0 (run ./setup.sh system)"; return 2; }
+    scanmem --version >/dev/null 2>&1 || { echo "scanmem missing"; return 2; }
+    local f; f="$(frida --version 2>/dev/null)" || { echo "frida missing (run ./setup.sh user:tools)"; return 2; }
+    echo "ptrace_scope 0, scanmem, frida $f"
+}
+
+check_mingw() {
+    bash "$RE_ENV/templates/dll-proxy-c/test.sh" 2>&1 | tail -1 || return 2
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || return 2
+}
+
+check_rust() {
+    rustup target list --installed 2>/dev/null | grep -q x86_64-pc-windows-gnu \
+        || { echo "target x86_64-pc-windows-gnu missing (run ./setup.sh user:tools)"; return 2; }
+    if ((FULL)); then
+        bash "$RE_ENV/templates/dll-proxy-rust/test.sh" 2>&1 | tail -1
+        [[ ${PIPESTATUS[0]} -eq 0 ]] || return 2
+    else
+        echo "windows-gnu target installed (--full builds the template)"
+    fi
+}
+
+check_bepinex() {
+    local args=()
+    ((FULL)) && [[ -n "$GAMEDIR" ]] && args=("$GAMEDIR")
+    bash "$RE_ENV/templates/bepinex-plugin/test.sh" "${args[@]}" 2>&1 | tail -1
+    [[ ${PIPESTATUS[0]} -eq 0 ]] || return 2
+}
+
+check_imhex() {
+    local v; v="$(flatpak info net.werwolv.ImHex 2>/dev/null | sed -n 's/^ *Version: *//p')" \
+        || { echo "ImHex flatpak missing (run ./setup.sh user:tools)"; return 2; }
+    [[ -n "$v" ]] || { echo "ImHex flatpak missing (run ./setup.sh user:tools)"; return 2; }
+    echo "ImHex $v"
+}
+
+check_workspace() {
+    local missing=()
+    [[ -e "$RE_HOME/CLAUDE.md" ]] || missing+=(CLAUDE.md)
+    [[ -e "$RE_HOME/.mcp.json" ]] || missing+=(.mcp.json)
+    ((${#missing[@]} == 0)) || { echo "$RE_HOME lacks ${missing[*]} (run ./setup.sh user:workspace)"; return 2; }
+    echo "$RE_HOME ready"
+}
+
+fails=0
+run_check() {
+    local name="$1" msg rc status
+    msg="$("check_$name")"; rc=$?
+    case $rc in 0) status=PASS ;; 1) status=WARN ;; *) status=FAIL; fails=$((fails + 1)) ;; esac
+    printf '%-4s %-12s %s\n' "$status" "$name" "${msg:-no output}"
+}
+
+if [[ -n "$ONLY" ]]; then
+    IFS=, read -r -a selected <<<"$ONLY"
+    for name in "${selected[@]}"; do
+        [[ " ${CHECKS[*]} " == *" $name "* ]] || usage_die "unknown check '$name'. Available: ${CHECKS[*]}"
+    done
+else
+    selected=("${CHECKS[@]}")
+fi
+
+for name in "${selected[@]}"; do run_check "$name"; done
+((fails == 0))

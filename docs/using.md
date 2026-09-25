@@ -17,7 +17,8 @@ Things you can ask for, in your own words:
 - "Decompile Assembly-CSharp of <game> and find the save routine."
 
 Claude then does the rounds on its own: finds the game and its app id, checks the
-folder for anti-cheat and stops if there is any, creates `~/re/targets/<game>/`,
+folder for anti-cheat and asks you yes or no before going on if it finds some,
+creates `~/re/targets/<game>/`,
 works out the engine, opens the binary in Ghidra over MCP or the assemblies with
 ILSpy, digs for the values, builds from a template, tests what it built, and
 writes everything it learned into `targets/<game>/notes.md`. Bulk work goes to the
@@ -43,15 +44,27 @@ cd ~/re/targets/<game>/mods/feed
 uv run feed.py
 ```
 
+Games without any mod support get their minimap the same way: the feed reads
+the player position straight out of the game's memory, no mod involved. Claude
+finds the position with you at the controller ("walk east", "walk west"), turns
+it into an address that survives a restart, and calibrates a map image from two
+spots you stand on. A screenshot of the in-game map is enough to start with;
+without an image the phone draws a grid.
+
 Panels for the phone (the game's own numbers next to the map) live in the
 sidehud repo under `sidehud/static/games/`; Claude can write one there too, it
 knows that repo's rules. The feeds themselves stay here in re-env: sidehud only
 takes integrations that use a game's own modding API, not memory readers.
 
-## Offline
+## Offline, or when a step does not go through
 
-`claude-local` instead of `claude` runs the same thing against the local models.
-Slower and less sharp, fine for a Sunday without internet.
+`claude-local` instead of `claude` runs the same session against the local
+models. Slower and less sharp, fine for a Sunday without internet, and the way
+to finish a step that did not go through the API, whether that was quota,
+network, or Claude Code declining it. `ask-local` takes single pieces: one
+function to explain, one struct to name, one crash log to read. Hand the local
+models small, self-contained jobs and say which game and what for; they do
+badly with a whole binary and well with one function.
 
 ## When something is off
 

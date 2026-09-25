@@ -34,7 +34,8 @@ protontricks -l
 
 The game folder is `~/.steam/steam/steamapps/common/<Game>`, its Proton prefix
 `~/.steam/steam/steamapps/compatdata/<appid>/pfx`. Before anything else, check
-the folder for anti-cheat (see `anti-cheat.md`). If it has some, stop here.
+the folder for anti-cheat (see `anti-cheat.md`). Claude Code asks you yes or no
+when it finds some; on your own, think twice.
 
 Create the target:
 

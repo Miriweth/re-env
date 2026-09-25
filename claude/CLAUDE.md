@@ -30,7 +30,11 @@ the two things below. Order of work:
 
 1. Find the game: `protontricks -l` for the app id, the folder under
    `~/.steam/steam/steamapps/common/`, the exe. Check the folder against
-   `docs/anti-cheat.md`. Anti-cheat present: stop and say so, nothing else.
+   `docs/anti-cheat.md`. If you find anti-cheat, do not decide yourself: name
+   what you found and ask one yes/no question, "This game runs <name>; a
+   debugger, injected DLL or memory reader can get the account banned.
+   Continue anyway? yes/no". No means stop. Yes means go on, and say in
+   `notes.md` that the user chose to.
 2. `re-new <game>`, then engine: `*_Data/Managed/Assembly-CSharp.dll` is Unity
    Mono (ILSpy, BepInEx), `GameAssembly.dll` is IL2CPP (`il2cppdumper`, then
    Ghidra), `Binaries/Win64/*-Shipping.exe` is Unreal (UE4SS, see
@@ -50,6 +54,28 @@ the two things below. Order of work:
    then `uv run feed.py` with the game, and check `curl -s localhost:8765/api/map`
    shows the packet. For a mod, build, `./install.sh <game dir>`, tell the user
    the launch option, read `mod.log` or `BepInEx/LogOutput.log` after a start.
+
+   A minimap for a game without any mod support is the memory reader's main
+   job. The recipe:
+   - Position: the player's x and y are usually two adjacent floats (or
+     doubles). With the game running, `scanmem <pid>`: "unknown float", then
+     ask the user to walk east and search "increased", walk west and
+     "decreased", stand still and "unchanged", until a handful of addresses
+     remain; the neighbour four bytes away is the other axis. Or find the
+     movement code in Ghidra and take the chain from there. Heading is often a
+     float in radians or degrees next to them, or a direction vector.
+   - Chain: turn the address into module + RVA (static) or a pointer chain from
+     a static base (`scanmem`'s pointer scan, or Ghidra: who writes this
+     address, where does that pointer come from). Prove it survives a restart.
+   - Map image: a screenshot of the in-game map, or an extracted map asset,
+     saved to `~/.config/sidehud/maps/<game>.png`. Calibrate with two
+     positions the user stands on: solve `origin_px + pos * px_per_unit` for
+     scale and origin (y is usually flipped). Write `<game>.toml` next to the
+     image with `name`, `image`, `origin_px`, `px_per_unit` and use its id in
+     `CONFIG["map"]`. Without an image `map = None` draws a grid, which is
+     enough to check the axes.
+   - Other markers (enemies, NPCs) are entity arrays: find one, then the
+     stride and count, and emit them as `kind: other` with a stable `id`.
 6. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
    following that repo's `AGENTS.md` and `docs/plugin-spec.md`. Feeds that read
    memory stay in re-env; do not add them to sidehud.
@@ -80,6 +106,12 @@ pseudocode, sorting strings. Check the results, these models guess.
 
 `deepseek` has no tool calling. It works with `ask-local` only, never as the
 agent. `claude-local [qwen|llama]` runs Claude Code offline against Ollama.
+
+When a step cannot go through the API (offline, out of quota, or Claude Code
+declines it), the user runs that step with `claude-local`, or hands the piece to
+`ask-local`. Keep such pieces small and self-contained: one function, one struct,
+one crash log, with the game and the goal named. The 14B models are good at that
+and poor at reasoning about a whole binary.
 
 Run `llm-off` before starting a game. The game and the model share the VRAM.
 

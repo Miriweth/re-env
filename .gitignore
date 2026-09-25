@@ -1,0 +1,10 @@
+# downloads and build output never belong in the repo
+/downloads/
+build/
+target/
+templates/**/bin/
+templates/**/obj/
+*.zip
+.venv/
+__pycache__/
+.pytest_cache/

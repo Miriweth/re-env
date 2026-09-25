@@ -77,8 +77,9 @@ the two things below. Order of work:
    - Other markers (enemies, NPCs) are entity arrays: find one, then the
      stride and count, and emit them as `kind: other` with a stable `id`.
 6. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
-   following that repo's `AGENTS.md` and `docs/plugin-spec.md`. Feeds that read
-   memory stay in re-env; do not add them to sidehud.
+   following that repo's `AGENTS.md` and `docs/plugin-spec.md`. The spec allows
+   senders that read game memory, so a finished feed can move to
+   `~/Projects/sidehud/games/<game>/` with its own README, like `games/stardew/`.
 7. Write `notes.md` as you go, not at the end: what, where (module + RVA or
    chain), how you know. Finish with what works, what is still guessed, and the
    exact commands to run it.

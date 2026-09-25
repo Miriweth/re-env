@@ -54,8 +54,9 @@ without an image the phone draws a grid.
 
 Panels for the phone (the game's own numbers next to the map) live in the
 sidehud repo under `sidehud/static/games/`; Claude can write one there too, it
-knows that repo's rules. The feeds themselves stay here in re-env: sidehud only
-takes integrations that use a game's own modding API, not memory readers.
+knows that repo's rules. A finished feed can move over as well, into
+`games/<game>/` next to the Stardew integration; sidehud's spec allows senders
+that read game memory.
 
 ## Offline, or when a step does not go through
 

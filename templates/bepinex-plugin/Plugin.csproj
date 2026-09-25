@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>ExamplePlugin</AssemblyName>
+    <RootNamespace>ExamplePlugin</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!-- pass the game folder: dotnet build -c Release -p:GameDir=/path/to/game -->
+    <GameDir Condition="'$(GameDir)' == ''"></GameDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.*" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <!-- game assemblies, only when a game folder is given -->
+  <ItemGroup Condition="'$(GameDir)' != ''">
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameDir)/*_Data/Managed/Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

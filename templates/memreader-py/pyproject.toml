@@ -1,0 +1,13 @@
+[project]
+name = "memreader"
+version = "0.1.0"
+description = "Read a Proton game's memory from the Linux side via procfs"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

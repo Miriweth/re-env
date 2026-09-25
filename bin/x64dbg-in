@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# x64dbg-in APPID — start x64dbg inside the Proton prefix of a Steam game.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+[[ $# -eq 1 ]] || usage_die "usage: x64dbg-in APPID   (app id from 'protontricks -l')"
+X64DBG="$RE_HOME/tools/x64dbg/release/x64/x64dbg.exe"
+[[ -f "$X64DBG" ]] || die "$X64DBG is missing. Run './setup.sh user' first."
+need protontricks-launch
+
+exec protontricks-launch --appid "$1" "$X64DBG"

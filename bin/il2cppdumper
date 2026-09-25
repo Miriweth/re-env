@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# il2cppdumper ARGS... — run Il2CppDumper (net7 build) on the installed .NET runtime.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+DLL="$RE_HOME/tools/il2cppdumper/Il2CppDumper.dll"
+[[ -f "$DLL" ]] || die "$DLL is missing. Run './setup.sh user' first."
+need dotnet
+
+DOTNET_ROLL_FORWARD=Major exec dotnet "$DLL" "$@"

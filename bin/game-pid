@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# game-pid EXE_NAME — PID of the (single) running game process, e.g. a Proton game.
+#
+# Matches the basename of argv[0] case-insensitively, not the whole command line:
+# `pgrep -f Game.exe` would also hit steam.sh, reaper, proton and the wine
+# wrappers, which all carry the exe path in their arguments.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+[[ $# -eq 1 ]] || usage_die "usage: game-pid EXE_NAME"
+name_lc="${1,,}"
+
+pids=()
+for f in /proc/[0-9]*/cmdline; do
+    pid="${f#/proc/}"; pid="${pid%/cmdline}"
+    [[ "$pid" == "$$" ]] && continue
+    argv0=""
+    IFS= read -r -d '' argv0 < "$f" 2>/dev/null || true
+    [[ -n "$argv0" ]] || continue
+    argv0="${argv0%\"}"; argv0="${argv0#\"}"          # Wine may quote argv[0]
+    base="${argv0##*/}"; base="${base##*\\}"         # unix or windows separators
+    [[ "${base,,}" == "$name_lc" ]] && pids+=("$pid")
+done
+
+case ${#pids[@]} in
+    0) die "no process for $1" ;;
+    1) echo "${pids[0]}" ;;
+    *)
+        echo "error: several processes for $1:" >&2
+        ps -o pid=,args= -p "$(IFS=,; echo "${pids[*]}")" >&2
+        exit 2
+        ;;
+esac

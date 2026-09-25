@@ -154,8 +154,9 @@ Three ways in, one template each:
   Harmony. Launch option `WINEDLLOVERRIDES="winhttp=n,b" %command%`.
 
 And one for reading instead of injecting: `memreader-py` reads the game's
-memory from Linux through procfs. That is how a live feed for something like
-sidehud gets its numbers without touching the game.
+memory from Linux through procfs and its `feed.py` sends positions and stats to
+sidehud ten times a second. `uv run feed.py --fake` puts a moving marker on the
+phone without a game, which proves the pipeline before you hunt for offsets.
 
 The loop is the same for all of them:
 

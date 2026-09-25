@@ -1,9 +1,8 @@
 # memreader-py
 
-Reads the memory of a Proton game from the Linux side through `/proc/<pid>/mem`.
-No Windows code and no injection; the Wine process is an ordinary Linux process.
-Meant for tools that watch the game live, like a sidehud feed for a minimap or
-a health bar.
+Reads the memory of a Proton game from the Linux side through `/proc/<pid>/mem`
+and can feed what it reads to sidehud. No Windows code and no injection; the
+Wine process is an ordinary Linux process.
 
 ## Requirement
 
@@ -32,6 +31,22 @@ with Process(find_pid("Game.exe")) as p:
     hits = p.scan("48 8B ?? 05 ?? ?? ?? ??", module="Game.exe")
     hp = p.read_f32(p.follow(base, [0x1A2B3C0, 0x10, 0x48]))
 ```
+
+## sidehud feed
+
+`feed.py` reads the player position and a few stats ten times a second and
+sends them to sidehud's map port as described in sidehud's `docs/plugin-spec.md`.
+Fill in `CONFIG` at the top: the exe name, the module, the pointer chains for
+x, y and heading, the stats you want, and a map definition or `None` for a grid.
+
+```
+uv run feed.py --fake      # a marker circles on the phone, no game needed
+uv run feed.py             # the real thing, game must be running
+```
+
+If sidehud shows the map tile with the fake marker, the pipeline works and only
+the offsets are left. `memreader/sidehud.py` has `build_packet` and `Sender`
+for your own scripts.
 
 ## Notes
 

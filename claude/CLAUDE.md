@@ -22,6 +22,44 @@ plugins) and Linux side tools that read game memory. Nothing else.
 Start Claude Code from `~/re`. `.mcp.json` lives there; from a subfolder the
 Ghidra connection is missing.
 
+## Requests
+
+The user asks in plain words: "make a sidehud feed for X", "find where X keeps
+the player's health", "a mod for X that hooks Y". Do the whole job; ask only for
+the two things below. Order of work:
+
+1. Find the game: `protontricks -l` for the app id, the folder under
+   `~/.steam/steam/steamapps/common/`, the exe. Check the folder against
+   `docs/anti-cheat.md`. Anti-cheat present: stop and say so, nothing else.
+2. `re-new <game>`, then engine: `*_Data/Managed/Assembly-CSharp.dll` is Unity
+   Mono (ILSpy, BepInEx), `GameAssembly.dll` is IL2CPP (`il2cppdumper`, then
+   Ghidra), `Binaries/Win64/*-Shipping.exe` is Unreal (UE4SS, see
+   `docs/ue4ss.md`), anything else is native (Ghidra).
+3. Static first. Ghidra over MCP, strings and imports, name what you understand.
+   For a value like health or position, look for the code that reads it (damage,
+   HUD drawing, movement) and follow the pointer chain back to a static base
+   in the module. Ask `ask-local` to pre-sort large batches.
+4. Dynamic when static does not settle it. Ask the user to start the game, run
+   `llm-off` before that. Then `game-pid`, and either `scanmem <pid>` or the
+   memreader scan; ask the user to change the value ("take damage now") and
+   narrow down. Convert every found address into module + RVA or a pointer
+   chain from the module base; absolute addresses die with the next launch.
+5. Build from a template with `re-new <game> <template> <name>`. For a sidehud
+   feed that is `memreader-py`: fill `CONFIG` in `feed.py` (exe, module, chains,
+   type, map, stats), run `uv run feed.py --fake` first to prove the pipeline,
+   then `uv run feed.py` with the game, and check `curl -s localhost:8765/api/map`
+   shows the packet. For a mod, build, `./install.sh <game dir>`, tell the user
+   the launch option, read `mod.log` or `BepInEx/LogOutput.log` after a start.
+6. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
+   following that repo's `AGENTS.md` and `docs/plugin-spec.md`. Feeds that read
+   memory stay in re-env; do not add them to sidehud.
+7. Write `notes.md` as you go, not at the end: what, where (module + RVA or
+   chain), how you know. Finish with what works, what is still guessed, and the
+   exact commands to run it.
+
+Ask the user only to start the game and to change values on cue. Everything
+else, decide and do.
+
 ## Ghidra via MCP
 
 Ghidra has to be running with the Ghydra plugin enabled; the first CodeBrowser

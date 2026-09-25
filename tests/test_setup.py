@@ -177,18 +177,18 @@ class ClaudeMd(unittest.TestCase):
     def test_claude_md_sections(self):
         txt = (REPO / "claude/CLAUDE.md").read_text()
         heads = [l[3:].strip() for l in txt.splitlines() if l.startswith("## ")]
-        self.assertEqual(heads, ["Purpose", "Layout", "Ghidra via MCP", "Local models", "Mod loop", "Rules"])
+        self.assertEqual(heads, ["Purpose", "Layout", "Requests", "Ghidra via MCP", "Local models", "Mod loop", "Rules"])
         for s in ("notes.md", "ask-local", "llm-off", "re-new", "PROTON_LOG=1", "docs/anti-cheat.md", "anti-cheat"):
             self.assertIn(s, txt)
 
 
 class Docs(unittest.TestCase):
     def test_docs_exist_with_sections(self):
-        for f in ("workflow.md", "anti-cheat.md", "ue4ss.md"):
+        for f in ("workflow.md", "anti-cheat.md", "ue4ss.md", "using.md"):
             self.assertTrue((REPO / "docs" / f).is_file(), f)
         heads = [l[3:].strip() for l in (REPO / "docs/workflow.md").read_text().splitlines() if l.startswith("## ")]
         self.assertEqual(heads, ["First start", "New game", "Static analysis", "Dynamic analysis",
                                  "Unity games", "Mods", "Local models", "Maintenance"])
         readme = (REPO / "README.md").read_text()
-        for s in ("./setup.sh pacman", "./setup.sh system", "./setup.sh user", "re-check", "docs/workflow.md"):
+        for s in ("./setup.sh pacman", "./setup.sh system", "./setup.sh user", "re-check", "docs/workflow.md", "docs/using.md"):
             self.assertIn(s, readme)

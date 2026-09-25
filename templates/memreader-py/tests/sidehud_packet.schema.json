@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Miriweth/sidehud/blob/main/docs/packet.schema.json",
+  "title": "sidehud packet",
+  "description": "One UDP datagram to sidehud's map port, 127.0.0.1:8766 by default. See docs/plugin-spec.md.",
+  "type": "object",
+  "properties": {
+    "game": {
+      "description": "Panel module id, loads sidehud/static/games/<game>.js.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
+    "source": {"type": "string"},
+    "map": {
+      "oneOf": [
+        {"type": "null"},
+        {"description": "Id of <maps folder>/<id>.toml.", "type": "string", "pattern": "^[^/.][^/]*$"},
+        {"$ref": "#/$defs/map"}
+      ]
+    },
+    "entities": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/entity"}},
+    "stats": {"description": "Free-form, passed to the panel untouched.", "type": "object"},
+    "id": {"type": "string"},
+    "kind": {"$ref": "#/$defs/kind"},
+    "x": {"type": "number"},
+    "y": {"type": "number"},
+    "z": {"type": "number"},
+    "heading": {"type": "number"},
+    "label": {"type": "string"}
+  },
+  "dependentRequired": {"x": ["y"], "y": ["x"]},
+  "$defs": {
+    "kind": {"enum": ["player", "ally", "other"]},
+    "pair": {
+      "type": "array",
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "entity": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"$ref": "#/$defs/kind"},
+        "x": {"type": "number"},
+        "y": {"type": "number"},
+        "z": {"type": "number"},
+        "heading": {"description": "Degrees clockwise, 0 is up.", "type": "number"},
+        "label": {"type": "string"}
+      }
+    },
+    "map": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "name": {"type": "string"},
+        "image": {
+          "description": "Path inside the maps folder, absolute path on the server, http(s) URL, or null for a grid.",
+          "type": ["string", "null"]
+        },
+        "origin_px": {"$ref": "#/$defs/pair"},
+        "px_per_unit": {"$ref": "#/$defs/pair"}
+      }
+    }
+  }
+}

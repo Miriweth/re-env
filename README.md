@@ -57,6 +57,7 @@ Models: `qwen2.5-coder:14b` as the default, `llama3.1:8b` for quick jobs,
 
 ## Docs
 
+- [docs/using.md](docs/using.md): what to ask Claude Code for and what happens then
 - [docs/workflow.md](docs/workflow.md): first start, taking a game apart, dynamic analysis, Unity, mods, local models, maintenance
 - [docs/anti-cheat.md](docs/anti-cheat.md): which games to leave alone and how to tell
 - [docs/ue4ss.md](docs/ue4ss.md): Unreal games

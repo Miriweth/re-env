@@ -1,0 +1,30 @@
+# Anti-cheat
+
+Only games you own, only single player or offline modes. Never attach a
+debugger, inject a DLL or read memory in a game that runs anti-cheat, even in
+its offline mode. Anti-cheat reports what it sees, and a ban hits the whole
+account.
+
+## How to tell
+
+Look in the game folder before doing anything else:
+
+- `EasyAntiCheat/` folder, `EasyAntiCheat_EOS_Setup.exe`, `start_protected_game.exe`
+- `BattlEye/` folder, `BEService.exe`, `BEClient_x64.dll`
+- `vgc.exe`, `vgk.sys` (Riot Vanguard; does not run under Proton anyway)
+- `nProtect`, `GameGuard`, `XIGNCODE`, `PunkBuster` in file or folder names
+
+Steam shows it too. The store page lists "Uses third-party anti-cheat" or
+"third-party DRM" in the box on the right, and areweanticheatyet.com tracks
+which ones run under Proton.
+
+Denuvo is DRM, not anti-cheat, but games with it are a poor target as well:
+the code is obfuscated and repeated launches while you patch things can trip
+its activation limit.
+
+## What is fine
+
+Offline single player games without any of the above. Mods for them through a
+proxy DLL or BepInEx, memory reading for an overlay, taking the binary apart in
+Ghidra. If a game has both a multiplayer mode with anti-cheat and a single
+player mode, treat it as an anti-cheat game.

@@ -100,8 +100,9 @@ check_dotnet() {
     local d i u
     d="$(dotnet --version 2>/dev/null)" || { echo "dotnet missing"; return 2; }
     i="$(ilspycmd --version 2>/dev/null | head -1)" || { echo "ilspycmd missing (run ./setup.sh user:tools)"; return 2; }
+    [[ -f "$RE_HOME/tools/il2cppdumper/Il2CppDumper.dll" ]] || { echo "Il2CppDumper.dll missing (run ./setup.sh user:downloads)"; return 2; }
     u="$(timeout 20 il2cppdumper </dev/null 2>&1 | head -c 2000)"
-    [[ -n "$u" ]] || { echo "il2cppdumper prints nothing"; return 2; }
+    [[ -n "$u" && "$u" != error:* ]] || { echo "il2cppdumper does not run: ${u:-no output}"; return 2; }
     echo "dotnet $d, $i, il2cppdumper ok"
 }
 

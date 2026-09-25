@@ -22,6 +22,7 @@ fetch_verified() {
 
 # extract_zip ZIP DIR — unpack, overwriting silently.
 extract_zip() {
+    need unzip
     mkdir -p "$2"
     unzip -oq "$1" -d "$2"
 }

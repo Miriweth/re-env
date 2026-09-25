@@ -41,6 +41,12 @@ class ReCheck(unittest.TestCase):
         line = self.call("--only", "workspace").stdout.splitlines()[0]
         self.assertRegex(line, r"^(PASS|WARN|FAIL) {1,4}workspace\s+\S")
 
+    def test_dotnet_fails_without_il2cppdumper(self):
+        r = self.call("--only", "dotnet")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertTrue(r.stdout.startswith("FAIL"), r.stdout)
+        self.assertIn("user:downloads", r.stdout)
+
     def test_only_accepts_several_names(self):
         r = self.call("--only", "workspace,x64dbg")
         names = [l.split()[1] for l in r.stdout.splitlines()]

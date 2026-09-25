@@ -9,7 +9,7 @@ source "$RE_ENV/lib/render.sh"
 PACKAGES=(
     ollama ollama-cuda
     ghidra jdk21-openjdk rizin rz-ghidra cutter radare2 binwalk scanmem protontricks
-    dotnet-sdk mingw-w64-gcc cmake ninja rustup uv flatpak
+    dotnet-sdk mingw-w64-gcc cmake ninja rustup uv flatpak unzip
 )
 
 usage() {

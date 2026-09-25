@@ -60,6 +60,10 @@ class ReNew(unittest.TestCase):
         self.assertIn("memreader-py", r.stderr)
         self.assertIn("dll-proxy-c", r.stderr)
 
+    def test_needs_no_cpio(self):
+        # cpio is not in base and not installed by setup.sh; tar is
+        self.assertNotIn("cpio", (BIN / "re-new").read_text())
+
     def test_no_args_usage(self):
         self.assertEqual(self.call().returncode, 2)
 

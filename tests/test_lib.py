@@ -58,6 +58,15 @@ class FetchVerified(unittest.TestCase):
         self.assertEqual((t / "out/sub/hello.txt").read_text(), "hi")
 
 
+class ExtractZipNeedsUnzip(unittest.TestCase):
+    def test_missing_unzip_is_named(self):
+        with tmp_home() as tmp:
+            r = run(["bash", "-c", f'PATH=/nonexistent; source "{REPO}/lib/common.sh"; source "{REPO}/lib/fetch.sh"; '
+                                   f'extract_zip "{tmp}/a.zip" "{tmp}/out"'])
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("unzip not found", r.stderr)
+
+
 class Render(unittest.TestCase):
     def test_render_replaces_re_home_and_is_json(self):
         with tmp_home() as tmp:

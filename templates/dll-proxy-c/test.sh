@@ -17,6 +17,10 @@ for sym in GetFileVersionInfoA GetFileVersionInfoW GetFileVersionInfoExA GetFile
            VerQueryValueA VerQueryValueW; do
     grep -qE "^\s*\[\s*[0-9]+\].*\s$sym\$" <<<"$dump" || { echo "missing export: $sym" >&2; exit 1; }
 done
+text="$(x86_64-w64-mingw32-objdump -d -j .text "$dll")"
+for sym in GetFileVersionInfoA VerQueryValueW VerLanguageNameA; do
+    grep -q "<$sym>:" <<<"$text" || { echo "export $sym is not in .text (the jmp stub landed in .bss, the DLL would crash)" >&2; exit 1; }
+done
 if grep -qiE 'DLL Name: (libgcc|libwinpthread|libstdc\+\+)' <<<"$dump"; then
     echo "DLL is not statically linked" >&2; exit 1
 fi

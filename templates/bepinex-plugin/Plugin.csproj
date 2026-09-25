@@ -16,12 +16,17 @@
     <PackageReference Include="UnityEngine.Modules" Version="2019.4.*" IncludeAssets="compile" />
   </ItemGroup>
 
-  <!-- game assemblies, only when a game folder is given -->
+  <!-- game assemblies, only when a game folder is given. The glob has to sit in
+       Include (MSBuild expands wildcards there, not in HintPath), and a folder
+       without the assembly fails the build instead of silently dropping it. -->
   <ItemGroup Condition="'$(GameDir)' != ''">
-    <Reference Include="Assembly-CSharp">
-      <HintPath>$(GameDir)/*_Data/Managed/Assembly-CSharp.dll</HintPath>
+    <GameAssembly Include="$(GameDir)/*_Data/Managed/Assembly-CSharp.dll" />
+    <Reference Include="@(GameAssembly)">
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+  <Target Name="RequireGameAssembly" BeforeTargets="CoreCompile" Condition="'$(GameDir)' != ''">
+    <Error Condition="'@(GameAssembly)' == ''" Text="No Assembly-CSharp.dll under $(GameDir)/*_Data/Managed. Check -p:GameDir." />
+  </Target>
 
 </Project>

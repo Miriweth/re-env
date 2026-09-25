@@ -42,9 +42,10 @@ if [[ ! -d "$src" ]]; then
 fi
 dest="$target/mods/$modname"
 [[ -e "$dest" ]] && die "$dest already exists"
-mkdir -p "$dest"
-# copy the template without build output or virtualenvs
-(cd "$src" && find . -mindepth 1 \
-    \( -name build -o -name target -o -name .venv -o -name bin -o -name obj -o -name __pycache__ -o -name .pytest_cache \) -prune -o \
-    -print0 | cpio -0pdm --quiet "$dest")
+# copy the template without build output or virtualenvs (tar is in base)
+tmp="$(mktemp -d "$target/mods/.$modname.XXXXXX")"
+tar -C "$src" --exclude=build --exclude=target --exclude=.venv --exclude=bin --exclude=obj \
+    --exclude=__pycache__ --exclude=.pytest_cache -cf - . | tar -C "$tmp" -xf - \
+    || { rm -rf "$tmp"; die "copying $template failed"; }
+mv "$tmp" "$dest"
 echo "$dest"

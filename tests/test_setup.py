@@ -47,7 +47,7 @@ class PacmanPhase(FakeSudoMixin, unittest.TestCase):
         self.assertIn("-S --needed --noconfirm", line)
         for pkg in ("ollama", "ollama-cuda", "ghidra", "jdk21-openjdk", "rizin", "rz-ghidra",
                     "cutter", "radare2", "binwalk", "scanmem", "protontricks", "dotnet-sdk",
-                    "mingw-w64-gcc", "cmake", "ninja", "rustup", "uv", "flatpak"):
+                    "mingw-w64-gcc", "cmake", "ninja", "rustup", "uv", "flatpak", "unzip"):
             self.assertIn(f" {pkg}", line + " ")
 
     def test_mentions_cuda_size(self):

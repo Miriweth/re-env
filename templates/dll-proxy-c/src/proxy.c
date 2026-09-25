@@ -7,9 +7,11 @@
 #include <windows.h>
 #include "proxy.h"
 
+/* `.text` matters: at -O0 the assembler would otherwise still be in .bss
+ * after the variable, and a jmp in .bss is zero-filled and not executable. */
 #define PROXY(name) \
     void *p_##name; \
-    __asm__(".globl " #name "\n" #name ":\n\tjmp *p_" #name "(%rip)\n");
+    __asm__(".text\n.globl " #name "\n" #name ":\n\tjmp *p_" #name "(%rip)\n");
 #define RESOLVE(name) p_##name = (void *)GetProcAddress(real, #name);
 
 #define FOR_EACH_EXPORT(X) \

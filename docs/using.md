@@ -63,8 +63,8 @@ models. Slower and less sharp, fine for a Sunday without internet, and the way
 to finish a step that did not go through the API, whether that was quota,
 network, or Claude Code declining it. `ask-local` takes single pieces: one
 function to explain, one struct to name, one crash log to read. Hand the local
-models small, self-contained jobs and say which game and what for; they do
-badly with a whole binary and well with one function.
+models small, self-contained jobs; they do badly with a whole binary and well
+with one function.
 
 ## When something is off
 

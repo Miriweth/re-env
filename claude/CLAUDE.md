@@ -110,8 +110,8 @@ agent. `claude-local [qwen|llama]` runs Claude Code offline against Ollama.
 When a step cannot go through the API (offline, out of quota, or Claude Code
 declines it), the user runs that step with `claude-local`, or hands the piece to
 `ask-local`. Keep such pieces small and self-contained: one function, one struct,
-one crash log, with the game and the goal named. The 14B models are good at that
-and poor at reasoning about a whole binary.
+one crash log. The 14B models are good at that and poor at reasoning about a
+whole binary.
 
 Run `llm-off` before starting a game. The game and the model share the VRAM.
 

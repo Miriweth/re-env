@@ -25,7 +25,9 @@ resolve_model() {
 ollama_reachable() { curl -sf -m 2 "$OLLAMA_URL/api/version" >/dev/null 2>&1; }
 
 ghidra_version() {
-    sed -n 's/^application\.version=//p' "${GHIDRA_ROOT:-/opt/ghidra}/Ghidra/application.properties"
+    local props="${GHIDRA_ROOT:-/opt/ghidra}/Ghidra/application.properties"
+    [[ -f "$props" ]] || die "$props missing (pacman -S ghidra)"
+    sed -n 's/^application\.version=//p' "$props"
 }
 
 ghidra_user_dir() {

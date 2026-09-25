@@ -36,6 +36,16 @@ class Templates(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     @unittest.skipUnless(has("dotnet"), "dotnet not installed")
+    def test_bepinex_test_leaves_template_clean(self):
+        import shutil as sh
+        for d in ("bin", "obj"):
+            sh.rmtree(T / "bepinex-plugin" / d, ignore_errors=True)
+        r = run(["bash", T / "bepinex-plugin/test.sh"])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        for d in ("bin", "obj"):
+            self.assertFalse((T / "bepinex-plugin" / d).exists(), d)
+
+    @unittest.skipUnless(has("dotnet"), "dotnet not installed")
     def test_bepinex_gamedir_reference(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:

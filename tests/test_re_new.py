@@ -64,6 +64,12 @@ class ReNew(unittest.TestCase):
         # cpio is not in base and not installed by setup.sh; tar is
         self.assertNotIn("cpio", (BIN / "re-new").read_text())
 
+    def test_rejects_empty_and_slashed_names(self):
+        for bad in ("", "a/b", "../x"):
+            r = self.call(bad)
+            self.assertEqual(r.returncode, 2, bad)
+            self.assertFalse((self.re_home / "targets").exists(), bad)
+
     def test_no_args_usage(self):
         self.assertEqual(self.call().returncode, 2)
 

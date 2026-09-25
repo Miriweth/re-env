@@ -9,6 +9,7 @@ if [[ $# -gt 0 && "$1" != -* ]]; then
     shift
 fi
 
+command -v claude >/dev/null 2>&1 || die "claude CLI not found (run ./setup.sh user:tools)."
 [[ "$model" == "deepseek-coder-v2:16b" ]] \
     && die "$model has no tool calling and cannot drive Claude Code. Use qwen or llama; deepseek only via ask-local."
 ollama_reachable || die "Ollama not reachable at $OLLAMA_URL (systemctl status ollama)."

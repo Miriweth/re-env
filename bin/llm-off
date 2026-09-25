@@ -3,6 +3,7 @@
 set -euo pipefail
 source "$(dirname "$(realpath "$0")")/../lib/common.sh"
 
+ollama_reachable || die "Ollama not reachable at $OLLAMA_URL (systemctl status ollama)."
 mapfile -t loaded < <(ollama ps | awk 'NR > 1 && NF { print $1 }')
 if [[ ${#loaded[@]} -eq 0 ]]; then
     echo "nothing loaded"

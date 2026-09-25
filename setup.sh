@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # re-env setup. Phases: pacman (sudo) | system (sudo) | user (no root).
-set -euo pipefail
+set -Eeuo pipefail
+trap 'echo "setup.sh: failed in phase ${PHASE:-?}" >&2' ERR
 # shellcheck source=lib/common.sh
 source "$(dirname "$(realpath "$0")")/lib/common.sh"
 source "$RE_ENV/lib/fetch.sh"
@@ -26,16 +27,19 @@ USAGE
 }
 
 phase_pacman() {
+    PHASE=pacman
     echo "Note: ollama-cuda pulls in the cuda package (5.2 GB)."
     sudo pacman -S --needed --noconfirm "${PACKAGES[@]}"
 }
 
 phase_system() {
+    PHASE=system
     sudo install -Dm644 "$RE_ENV/system/ollama-re-env.conf" /etc/systemd/system/ollama.service.d/re-env.conf
     sudo install -Dm644 "$RE_ENV/system/10-ptrace.conf" /etc/sysctl.d/10-ptrace.conf
     sudo sysctl --system
     sudo systemctl daemon-reload
     sudo systemctl enable --now ollama
+    sudo systemctl restart ollama      # pick up the drop-in on a rerun as well
 }
 
 user_dirs() {
@@ -45,7 +49,9 @@ user_dirs() {
 user_tools() {
     if ! command -v claude >/dev/null 2>&1; then
         echo "Installing the Claude Code CLI into $LOCAL_BIN"
-        curl -fsSL https://claude.ai/install.sh | bash
+        local installer; installer="$(mktemp)"
+        curl -fsSL -o "$installer" https://claude.ai/install.sh && bash "$installer"
+        rm -f "$installer"
     fi
     uv tool install frida-tools || uv tool upgrade frida-tools
     dotnet tool update -g ilspycmd
@@ -95,6 +101,7 @@ user_models() {
 }
 
 phase_user() {
+    PHASE=user
     user_dirs
     user_tools
     user_downloads
@@ -106,7 +113,7 @@ case "${1:-all}" in
     pacman) phase_pacman ;;
     system) phase_system ;;
     user) phase_user ;;
-    user:dirs|user:tools|user:downloads|user:workspace|user:models) "user_${1#user:}" ;;
+    user:dirs|user:tools|user:downloads|user:workspace|user:models) PHASE="$1"; "user_${1#user:}" ;;
     user:*) usage >&2; usage_die "unknown step: $1" ;;
     all) phase_pacman; phase_system; phase_user ;;
     -h|--help) usage ;;

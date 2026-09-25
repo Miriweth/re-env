@@ -8,7 +8,7 @@ endif()
 include(FetchContent)
 FetchContent_Declare(minhook
     GIT_REPOSITORY https://github.com/TsudaKageyu/minhook
-    GIT_TAG v1.3.4)
+    GIT_TAG c3fcafdc10146beb5919319d0683e44e3c30d537)  # v1.3.4
 FetchContent_MakeAvailable(minhook)
 
 add_library(version SHARED src/dllmain.c src/proxy.c src/version.def)

@@ -22,8 +22,10 @@ USAGE
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --full) FULL=1 ;;
-        --gamedir) GAMEDIR="${2:-}"; shift ;;
-        --only) ONLY="${2:-}"; shift ;;
+        --gamedir|--only)
+            [[ $# -ge 2 && "$2" != -* ]] || { usage >&2; usage_die "$1 needs a value"; }
+            [[ "$1" == --gamedir ]] && GAMEDIR="$2" || ONLY="$2"
+            shift ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; usage_die "unknown option: $1" ;;
     esac
@@ -55,7 +57,7 @@ check_anthropic() {
         -d '{"model":"llama3.1:8b","max_tokens":8,"messages":[{"role":"user","content":"ok"}]}')" \
         || { echo "POST /v1/messages failed"; return 2; }
     grep -q '"type":"message"' <<<"$resp" || { echo "unexpected answer from /v1/messages"; return 2; }
-    if ollama ps 2>/dev/null | awk 'NR > 1 && $1 == "llama3.1:8b"' | grep -q GPU; then
+    if ollama ps 2>/dev/null | awk 'NR > 1 && $1 == "llama3.1:8b"' | grep -q '100% GPU'; then
         echo "/v1/messages answers, llama3.1:8b runs on the GPU"
     else
         echo "/v1/messages answers, but llama3.1:8b runs on the CPU"; return 1
@@ -75,7 +77,8 @@ check_claude() {
 }
 
 check_ghidra() {
-    [[ -x /opt/ghidra/support/analyzeHeadless ]] || { echo "/opt/ghidra missing (pacman -S ghidra)"; return 2; }
+    local root="${GHIDRA_ROOT:-/opt/ghidra}"
+    [[ -x "$root/support/analyzeHeadless" ]] || { echo "$root missing (pacman -S ghidra)"; return 2; }
     local props="$(ghidra_user_dir)/Extensions/Ghydra/extension.properties" have want
     [[ -f "$props" ]] || { echo "Ghydra extension missing (run ./setup.sh user:downloads)"; return 2; }
     have="$(sed -n 's/^ghidraVersion=//p' "$props")"; want="$(ghidra_version)"

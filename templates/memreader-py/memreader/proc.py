@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from .scan import find_all, parse_pattern
 
+CHUNK = 64 << 20  # bytes read per pread while scanning; big regions come in slices
+
 PTRACE_HINT = (
     "cannot open /proc/{pid}/mem: Permission denied. Reading another process needs "
     "kernel.yama.ptrace_scope = 0 (sysctl -w kernel.yama.ptrace_scope=0, "
@@ -117,12 +119,19 @@ class Process:
         if module is not None:
             regions = [r for r in regions if _basename(r.path).lower() == module.lower()]
         hits = []
+        overlap = len(pat) - 1
         for r in regions:
             if "r" not in r.perms or r.path in ("[vvar]", "[vsyscall]"):
                 continue
-            try:
-                data = self.read(r.start, r.end - r.start)
-            except OSError:
-                continue
-            hits.extend(r.start + i for i in find_all(data, pat))
-        return hits
+            pos = r.start
+            while pos < r.end:
+                size = min(CHUNK, r.end - pos)
+                try:
+                    data = self.read(pos, size)
+                except (OSError, MemoryError):
+                    break
+                hits.extend(pos + i for i in find_all(data, pat) if pos + i + len(pat) <= r.end)
+                if pos + size >= r.end:
+                    break
+                pos += size - overlap
+        return sorted(set(hits))

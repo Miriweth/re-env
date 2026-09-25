@@ -60,6 +60,13 @@ class ClaudeLocal(FakesMixin, unittest.TestCase):
         self.assertIn("no tool calling", r.stderr)
         self.assertEqual(self.calls(), [])
 
+    def test_missing_claude_cli_is_named(self):
+        (self.fake_bin / "claude").unlink()
+        r = run([BIN / "claude-local"], env=dict(self.env, PATH=f"{self.fake_bin}:/usr/bin"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("claude", r.stderr)
+        self.assertIn("user:tools", r.stderr)
+
     def test_unreachable(self):
         r = self.call("claude-local", FAKE_CURL_EXIT="7")
         self.assertEqual(r.returncode, 1)
@@ -111,6 +118,12 @@ class LlmOff(FakesMixin, unittest.TestCase):
         self.assertIn("ollama stop llama3.1:8b", log)
         self.assertIn("unloaded: qwen2.5-coder:14b", r.stdout)
         self.assertIn("unloaded: llama3.1:8b", r.stdout)
+
+    def test_unreachable(self):
+        r = self.call("llm-off", FAKE_CURL_EXIT="7")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("Ollama not reachable", r.stderr)
+        self.assertEqual(self.calls(), [])
 
     def test_nothing_loaded(self):
         r = self.call("llm-off", FAKE_PS=self.HEADER)

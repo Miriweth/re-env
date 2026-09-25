@@ -18,7 +18,7 @@ card and 16 GB of VRAM should work the same way.
 - Arch Linux or a derivative with the `extra` repo, sudo
 - NVIDIA GPU with 16 GB VRAM (one 14B model plus 32K context fits)
 - Steam with Proton, `protontricks`
-- flatpak with flathub (for ImHex)
+- flatpak (for ImHex)
 
 ## Install
 

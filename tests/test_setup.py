@@ -19,8 +19,10 @@ class SetupDispatch(unittest.TestCase):
             self.assertIn(p, r.stdout)
 
     def test_bash_syntax(self):
-        for f in ("setup.sh", "lib/common.sh"):
-            r = run(["bash", "-n", REPO / f])
+        files = [REPO / "setup.sh", *sorted((REPO / "lib").glob("*.sh")), *sorted((REPO / "bin").iterdir())]
+        self.assertGreater(len(files), 10)
+        for f in files:
+            r = run(["bash", "-n", f])
             self.assertEqual(r.returncode, 0, f"{f}: {r.stderr}")
 
 
@@ -63,8 +65,15 @@ class SystemPhase(FakeSudoMixin, unittest.TestCase):
         for s in ("install -Dm644", "system/ollama-re-env.conf",
                   "/etc/systemd/system/ollama.service.d/re-env.conf",
                   "system/10-ptrace.conf", "/etc/sysctl.d/10-ptrace.conf",
-                  "sysctl --system", "systemctl daemon-reload", "systemctl enable --now ollama"):
+                  "sysctl --system", "systemctl daemon-reload", "systemctl enable --now ollama",
+                  "systemctl restart ollama"):
             self.assertTrue(any(s in l for l in log), f"{s!r} not in {log}")
+
+    def test_failed_phase_is_named(self):
+        make_fake(self.fake_bin, "sudo", 'exit 1')
+        r = self.run_phase("system")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("failed in phase system", r.stderr)
 
 
 class SystemFiles(unittest.TestCase):
@@ -112,6 +121,12 @@ class CommonLib(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertIn("falsch", r.stderr)
 
+    def test_ghidra_version_dies_without_properties(self):
+        with tmp_home() as tmp:
+            r = self.bash("ghidra_version", env={"GHIDRA_ROOT": tmp})
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("application.properties", r.stderr)
+
     def test_ghidra_user_dir_from_properties(self):
         with tmp_home() as tmp:
             root = Path(tmp) / "ghidra"
@@ -121,9 +136,6 @@ class CommonLib(unittest.TestCase):
             r = self.bash("ghidra_version; ghidra_user_dir", env={"GHIDRA_ROOT": str(root), "HOME": "/h"})
         self.assertEqual(r.stdout.split(), ["12.1.2", "/h/.config/ghidra/ghidra_12.1.2_PUBLIC"])
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class UserPhase(unittest.TestCase):
@@ -192,3 +204,8 @@ class Docs(unittest.TestCase):
         readme = (REPO / "README.md").read_text()
         for s in ("./setup.sh pacman", "./setup.sh system", "./setup.sh user", "re-check", "docs/workflow.md", "docs/using.md"):
             self.assertIn(s, readme)
+        self.assertNotIn("flathub", readme.split("## Install")[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -6,8 +6,11 @@ namespace ExamplePlugin;
 [BepInPlugin("re.example.plugin", "ExamplePlugin", "0.1.0")]
 public class Plugin : BaseUnityPlugin
 {
+    private static BepInEx.Logging.ManualLogSource? Log;
+
     private void Awake()
     {
+        Log = Logger;
         Logger.LogInfo("ExamplePlugin loaded");
         Harmony.CreateAndPatchAll(typeof(Plugin));
     }
@@ -18,6 +21,6 @@ public class Plugin : BaseUnityPlugin
     [HarmonyPrefix]
     private static void DebugLogPrefix(object message)
     {
-        BepInEx.Logging.Logger.CreateLogSource("ExamplePlugin").LogDebug($"Debug.Log: {message}");
+        Log?.LogDebug($"Debug.Log: {message}");
     }
 }

@@ -80,6 +80,16 @@ class Render(unittest.TestCase):
         self.assertEqual(srv["env"]["GHIDRA_HYDRA_HOST"], "localhost")
 
 
+class RenderAwkwardPath(unittest.TestCase):
+    def test_render_survives_sed_special_characters(self):
+        with tmp_home() as tmp:
+            dest = Path(tmp) / ".mcp.json"
+            r = bash(f'render_template "$RE_ENV/mcp/mcp.json.tmpl" "{dest}"', env={"RE_HOME": "/x/a|b&c\\d"})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            data = json.loads(dest.read_text().replace("\\", "\\\\"))
+        self.assertEqual(data["mcpServers"]["ghydra"]["args"][1], "/x/a|b&c\\d/tools/ghydra/bridge_mcp_hydra.py")
+
+
 class VersionsEnv(unittest.TestCase):
     def test_versions_env_complete(self):
         kv = dict(l.split("=", 1) for l in (REPO / "versions.env").read_text().splitlines()

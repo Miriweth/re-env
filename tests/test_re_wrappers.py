@@ -14,12 +14,15 @@ class GamePid(unittest.TestCase):
         self.addCleanup(p.wait)
         self.addCleanup(p.terminate)
         # wait until the exec happened and the cmdline shows the fake name
+        import time
         for _ in range(200):
             try:
-                if self.NAME.encode() in Path(f"/proc/{p.pid}/cmdline").read_bytes():
+                argv0 = Path(f"/proc/{p.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+                if argv0.endswith(self.NAME.encode()):
                     return p
             except FileNotFoundError:
                 pass
+            time.sleep(0.01)
         self.fail("fake game did not start")
 
     def test_single_match_prints_pid(self):

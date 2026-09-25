@@ -47,6 +47,11 @@ class ReCheck(unittest.TestCase):
         self.assertTrue(r.stdout.startswith("FAIL"), r.stdout)
         self.assertIn("user:downloads", r.stdout)
 
+    def test_options_need_values(self):
+        for args in (("--only",), ("--gamedir",), ("--full", "--gamedir")):
+            r = self.call(*args)
+            self.assertEqual(r.returncode, 2, args)
+
     def test_only_accepts_several_names(self):
         r = self.call("--only", "workspace,x64dbg")
         names = [l.split()[1] for l in r.stdout.splitlines()]

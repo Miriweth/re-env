@@ -60,6 +60,31 @@ def test_scan_in_own_process():
     assert ctypes.addressof(needle) in hits
 
 
+def test_scan_finds_needle_across_chunk_boundary(monkeypatch):
+    import memreader.proc as procmod
+    # small slices so the needle sits in a later slice and the overlap has to carry it
+    monkeypatch.setattr(procmod, "CHUNK", 4096)
+    raw = ctypes.create_string_buffer(3 * 4096)
+    off = 4096 + 4093
+    ctypes.memmove(ctypes.addressof(raw) + off, b"\xde\xad\xbe\xef\x42\x42", 6)
+    with Process(os.getpid()) as p:
+        hits = p.scan("DE AD ?? EF 42 42")
+    assert ctypes.addressof(raw) + off in hits
+
+
+def test_scan_skips_regions_that_raise_memory_error(monkeypatch):
+    with Process(os.getpid()) as p:
+        real_read = p.read
+
+        def flaky(addr, size):
+            if size > 4096:
+                raise MemoryError
+            return real_read(addr, size)
+
+        monkeypatch.setattr(p, "read", flaky)
+        assert isinstance(p.scan("00 00 00 00"), list)
+
+
 def test_maps_of_own_process_contain_python():
     with Process(os.getpid()) as p:
         assert any("python" in r.path for r in p.maps())
@@ -90,12 +115,15 @@ NAME = f"FakeGame{os.getpid()}.exe"
 
 def _spawn():
     p = subprocess.Popen(["bash", "-c", f'exec -a "{NAME}" sleep 30'])
+    import time
     for _ in range(200):
         try:
-            if NAME.encode() in Path(f"/proc/{p.pid}/cmdline").read_bytes():
+            argv0 = Path(f"/proc/{p.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
+            if argv0.endswith(NAME.encode()):
                 return p
         except FileNotFoundError:
             pass
+        time.sleep(0.01)
     raise RuntimeError("fake game did not start")
 
 

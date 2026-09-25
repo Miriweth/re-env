@@ -5,6 +5,8 @@ source "$(dirname "$(realpath "$0")")/../lib/common.sh"
 
 [[ $# -ge 1 && $# -le 3 ]] || usage_die "usage: re-new GAME [TEMPLATE [MODNAME]]"
 game="$1" template="${2:-}" modname="${3:-${2:-}}"
+[[ -n "$game" && "$game" != */* && "$game" != .* ]] || usage_die "game name must be a plain folder name, got '$game'"
+[[ -z "$modname" || ( "$modname" != */* && "$modname" != .* ) ]] || usage_die "mod name must be a plain folder name, got '$modname'"
 target="$RE_HOME/targets/$game"
 
 mkdir -p "$target"/{ghidra,dumps,mods}

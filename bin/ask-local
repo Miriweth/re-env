@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# ask-local [MODEL] PROMPT  — send a prompt (plus stdin, if any) to a local model.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+case $# in
+    1) model="$DEFAULT_MODEL"; prompt="$1" ;;
+    2) model="$(resolve_model "$1")"; prompt="$2" ;;
+    *) usage_die "usage: ask-local [MODEL] PROMPT   (stdin is appended)" ;;
+esac
+
+ollama_reachable || die "Ollama not reachable at $OLLAMA_URL (systemctl status ollama)."
+
+input=""
+[[ -t 0 ]] || input="$(cat)"
+
+if [[ -n "$input" ]]; then
+    printf '%s\n\n%s\n' "$prompt" "$input"
+else
+    printf '%s\n' "$prompt"
+fi | exec ollama run "$model"

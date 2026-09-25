@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# llm-off — unload every model Ollama holds in VRAM (run before starting a game).
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+mapfile -t loaded < <(ollama ps | awk 'NR > 1 && NF { print $1 }')
+if [[ ${#loaded[@]} -eq 0 ]]; then
+    echo "nothing loaded"
+    exit 0
+fi
+for name in "${loaded[@]}"; do
+    ollama stop "$name"
+    echo "unloaded: $name"
+done

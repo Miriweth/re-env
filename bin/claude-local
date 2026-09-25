@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# claude-local [MODEL] [CLAUDE_ARGS...] — run Claude Code against local Ollama.
+set -euo pipefail
+source "$(dirname "$(realpath "$0")")/../lib/common.sh"
+
+model="$DEFAULT_MODEL"
+if [[ $# -gt 0 && "$1" != -* ]]; then
+    model="$(resolve_model "$1")"
+    shift
+fi
+
+[[ "$model" == "deepseek-coder-v2:16b" ]] \
+    && die "$model has no tool calling and cannot drive Claude Code. Use qwen or llama; deepseek only via ask-local."
+ollama_reachable || die "Ollama not reachable at $OLLAMA_URL (systemctl status ollama)."
+
+ANTHROPIC_BASE_URL="$OLLAMA_URL" ANTHROPIC_AUTH_TOKEN=ollama ANTHROPIC_API_KEY= \
+    exec claude --model "$model" "$@"

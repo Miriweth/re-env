@@ -15,7 +15,8 @@ for f in /proc/[0-9]*/cmdline; do
     pid="${f#/proc/}"; pid="${pid%/cmdline}"
     [[ "$pid" == "$$" ]] && continue
     argv0=""
-    IFS= read -r -d '' argv0 < "$f" 2>/dev/null || true
+    # a process may exit between the glob and the read; the redirect itself can fail
+    { IFS= read -r -d '' argv0 < "$f"; } 2>/dev/null || true
     [[ -n "$argv0" ]] || continue
     argv0="${argv0%\"}"; argv0="${argv0#\"}"          # Wine may quote argv[0]
     base="${argv0##*/}"; base="${base##*\\}"         # unix or windows separators

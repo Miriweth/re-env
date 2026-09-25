@@ -32,8 +32,10 @@ Find the game and its app id:
 protontricks -l
 ```
 
-The game folder is `~/.steam/steam/steamapps/common/<Game>`, its Proton prefix
-`~/.steam/steam/steamapps/compatdata/<appid>/pfx`. Before anything else, check
+The game folder is `steamapps/common/<Game>` in whichever Steam library holds
+it; `~/.steam/steam/steamapps/libraryfolders.vdf` lists the libraries (a second
+SSD is common). The Proton prefix sits next to it in
+`steamapps/compatdata/<appid>/pfx`. Before anything else, check
 the folder for anti-cheat (see `anti-cheat.md`). Claude Code asks you yes or no
 when it finds some; on your own, think twice.
 
@@ -165,7 +167,7 @@ The loop is the same for all of them:
 re-new <game> dll-proxy-c hud     # copies the template to targets/<game>/mods/hud
 cd ~/re/targets/<game>/mods/hud
 # build, see the template's README
-./install.sh ~/.steam/steam/steamapps/common/<Game>
+./install.sh "<library>/steamapps/common/<Game>"
 ```
 
 `install.sh` prints the launch option. Set it in Steam under Properties, start

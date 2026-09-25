@@ -28,8 +28,11 @@ The user asks in plain words: "make a sidehud feed for X", "find where X keeps
 the player's health", "a mod for X that hooks Y". Do the whole job; ask only for
 the two things below. Order of work:
 
-1. Find the game: `protontricks -l` for the app id, the folder under
-   `~/.steam/steam/steamapps/common/`, the exe. Check the folder against
+1. Find the game: `protontricks -l` for the app id; the install folder is
+   `steamapps/common/<Game>` inside one of the Steam library folders listed in
+   `~/.steam/steam/steamapps/libraryfolders.vdf` (on this machine that includes
+   `/mnt/SSD1/Steam`), the Proton prefix is
+   `<library>/steamapps/compatdata/<appid>/pfx`. Then the exe. Check the folder against
    `docs/anti-cheat.md`. If you find anti-cheat, do not decide yourself: name
    what you found and ask one yes/no question, "This game runs <name>; a
    debugger, injected DLL or memory reader can get the account banned.

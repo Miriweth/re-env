@@ -38,18 +38,28 @@ the two things below. Order of work:
    Mono (ILSpy, BepInEx), `GameAssembly.dll` is IL2CPP (`il2cppdumper`, then
    Ghidra), `Binaries/Win64/*-Shipping.exe` is Unreal (UE4SS, see
    `docs/ue4ss.md`), anything else is native (Ghidra).
-3. Static first. Ghidra over MCP, strings and imports, name what you understand.
+3. Public sources before reversing from scratch. Someone has usually done the
+   first pass: the game's thread on unknowncheats.me (and its Unreal Engine
+   section for GWorld, GNames and GObjects patterns per engine version), SDK
+   dumps on GitHub, Cheat Engine tables on fearlessrevolution.com. Offsets are
+   tied to a game version; take them as a starting point, verify with
+   `find_offset.py`, and write the source and version into `notes.md`. Claude
+   Code cannot open unknowncheats.me itself; ask the user to look and paste.
+   For Unreal games the reliable route is an SDK dump: Dumper-7 is a DLL that
+   writes the whole SDK with offsets when loaded into the game; the
+   `dll-proxy-c` template can load it from `mod_main` with `LoadLibraryA`.
+4. Static next. Ghidra over MCP, strings and imports, name what you understand.
    For a value like health or position, look for the code that reads it (damage,
    HUD drawing, movement) and follow the pointer chain back to a static base
    in the module. Ask `ask-local` to pre-sort large batches.
-4. Dynamic when static does not settle it. Ask the user to start the game, run
+5. Dynamic when static does not settle it. Ask the user to start the game, run
    `llm-off` before that. Then, from the game's `mods/<feed>/` folder,
    `uv run find_offset.py position` for the player position or
    `uv run find_offset.py value <hud value>` for a stat; it drives scanmem and
    only asks the user to stand still, move, or read the HUD. It prints a
    CONFIG snippet at the end. Convert every found address into module + RVA or a pointer
    chain from the module base; absolute addresses die with the next launch.
-5. Build from a template with `re-new <game> <template> <name>`. For a sidehud
+6. Build from a template with `re-new <game> <template> <name>`. For a sidehud
    feed that is `memreader-py`: fill `CONFIG` in `feed.py` (exe, module, chains,
    type, map, stats), run `uv run feed.py --fake` first to prove the pipeline,
    then `uv run feed.py` with the game, and check `curl -s localhost:8765/api/map`
@@ -76,11 +86,11 @@ the two things below. Order of work:
      enough to check the axes.
    - Other markers (enemies, NPCs) are entity arrays: find one, then the
      stride and count, and emit them as `kind: other` with a stable `id`.
-6. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
+7. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
    following that repo's `AGENTS.md` and `docs/plugin-spec.md`. The spec allows
    senders that read game memory, so a finished feed can move to
    `~/Projects/sidehud/games/<game>/` with its own README, like `games/stardew/`.
-7. Write `notes.md` as you go, not at the end: what, where (module + RVA or
+8. Write `notes.md` as you go, not at the end: what, where (module + RVA or
    chain), how you know. Finish with what works, what is still guessed, and the
    exact commands to run it.
 

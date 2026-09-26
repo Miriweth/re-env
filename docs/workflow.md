@@ -51,6 +51,16 @@ exist in a chat window are gone by tomorrow.
 
 ## Static analysis
 
+Before opening Ghidra, look at what is already public. unknowncheats.me has a
+thread for most games with offsets, pointer chains and structures, and an
+Unreal Engine section with GWorld, GNames and GObjects patterns per engine
+version. GitHub has SDK dumps, fearlessrevolution.com has Cheat Engine tables
+whose pointer chains carry over. All of it is tied to a game version, so treat
+it as a head start and verify with `find_offset.py`. For Unreal games,
+[Dumper-7](https://github.com/Encryqed/Dumper-7) dumps the complete SDK with
+offsets once loaded into the game; the `dll-proxy-c` template can load its
+DLL from `mod_main`.
+
 Start Ghidra, create a project in `~/re/targets/<game>/ghidra/`, import the
 exe (and the DLLs you care about, `UnityPlayer.dll`, `GameAssembly.dll`) and
 let the auto analysis run. For a big game that takes a while.

@@ -474,7 +474,7 @@ class ReDash(unittest.TestCase):
     def test_page_has_csp_hash_matching_script(self):
         r = self.get(self.start(), "/")
         page = r.body.decode()
-        self.assertEqual(page, (Path(__file__).resolve().parent.parent / "lib/station/page.html").read_text())
+        self.assertEqual(page, (Path(__file__).resolve().parent.parent / "lib/station/page.html").read_text(encoding="utf-8"))
         scripts = re.findall(r"<script>(.*?)</script>", page, re.S)
         self.assertEqual(len(scripts), 1)
         self.assertEqual(page.count("<script"), 1)
@@ -482,6 +482,16 @@ class ReDash(unittest.TestCase):
         self.assertIn(f"script-src 'sha256-{h}'", r.getheader("Content-Security-Policy"))
         self.assertIsNone(re.search(r"<[^>]*\s(on\w+|style)\s*=", page, re.I))
         self.assertNotIn("innerHTML", page)
+
+    def test_page_token_survives_reload_and_polls_do_not_overlap(self):
+        page = self.get(self.start(), "/").body.decode()
+        self.assertIn('sessionStorage.getItem("re-dash-token")', page)
+        self.assertIn('sessionStorage.setItem("re-dash-token"', page)
+        self.assertNotIn('localStorage.setItem("re-dash-token"', page)
+        self.assertNotIn("document.cookie", page)
+        self.assertIn("token missing or stale: restart re-dash and open the printed URL", page)
+        self.assertIn("if (my !== seq) return", page)
+        self.assertIn("if (!inflight) tick()", page)
 
     def test_page_has_station_controls(self):
         page = self.get(self.start(), "/").body.decode()
@@ -507,6 +517,11 @@ class StateUnit(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 state.save_settings(bad)
         self.assertFalse((Path(self.tmp.name) / "station.json").exists())
+
+    def test_unknown_setting_message_does_not_echo_keys(self):
+        with self.assertRaises(ValueError) as c:
+            state.save_settings({"<evil>": 1})
+        self.assertEqual(str(c.exception), "unknown setting")
 
     def test_make_token_unwritable_exits(self):
         from station import server

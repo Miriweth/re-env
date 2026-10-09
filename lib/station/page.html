@@ -118,8 +118,14 @@ textarea{display:block;width:100%;margin-top:12px;padding:8px;resize:vertical;mi
 </div>
 </main>
 <script>
-const TOKEN = location.hash.slice(1);
-history.replaceState(null, "", location.pathname);
+let TOKEN = location.hash.slice(1);
+if (TOKEN) {
+  // per tab and same-origin only, so a reload keeps it; never localStorage or a cookie
+  try { sessionStorage.setItem("re-dash-token", TOKEN); } catch (e) {}
+  history.replaceState(null, "", location.pathname);
+} else {
+  try { TOKEN = sessionStorage.getItem("re-dash-token") || ""; } catch (e) {}
+}
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => {
   const e = document.createElement(tag);
@@ -128,13 +134,14 @@ const el = (tag, cls, text) => {
   return e;
 };
 const GIB = 1024;
-const STALE = "token missing or stale, restart re-dash and open the printed URL";
+const STALE = "token missing or stale: restart re-dash and open the printed URL";
 const CANNED = {
   recon: g => `Run game-recon for ${g}: um scan, engine, anti-cheat facts, decompile into dumps/, write MODDING_PLAN.md, open points into issues.md.`,
   mod: g => `Install a mod for ${g} that `,
   fieldnote: () => "Turn MODLOG.md into a knowledge-base note with um kb new, then um kb check. Do not open a PR.",
 };
 
+let seq = 0, inflight = false;
 let game = "", lastText = "", threadKey = "", threadLen = 0, status = "idle", last = null;
 try { game = localStorage.getItem("re-dash.game") || ""; } catch (e) {}
 
@@ -181,6 +188,7 @@ function renderMsg(m, i) {
   const text = String(m.text ?? "");
   if (role === "tool") {
     const d = el("details", "msg tool");
+    d.dataset.key = i + ":" + m.t;
     d.append(el("summary", "", text.split("\n")[0]), el("pre", "", text));
     return d;
   }
@@ -200,8 +208,10 @@ function renderMsg(m, i) {
 function renderThread(entries) {
   const box = $("thread");
   const scroll = new Map([...box.querySelectorAll("pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
+  const open = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.key));
   const top = box.scrollTop;
   box.replaceChildren(...entries.map(renderMsg));
+  box.querySelectorAll("details[data-key]").forEach(d => { d.open = open.has(d.dataset.key); });
   box.querySelectorAll("pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
   box.scrollTop = entries.length > threadLen ? box.scrollHeight : top;
   threadLen = entries.length;
@@ -260,10 +270,13 @@ function render(s) {
 }
 
 async function tick() {
+  const my = ++seq;  // newest request wins; older responses are dropped
+  inflight = true;
   try {
     const r = await fetch("/api/state?game=" + encodeURIComponent(game), {cache: "no-store"});
     if (!r.ok) throw new Error(r.status);
     const text = await r.text();
+    if (my !== seq) return;
     if (text !== lastText) {
       const s = JSON.parse(text);
       if (!s.system.games.includes(game) && s.system.games.length) { selectGame(s.system.games[0]); return; }
@@ -274,7 +287,11 @@ async function tick() {
     }
     document.body.className = "online";
   } catch (e) {
+    if (my !== seq) return;
+    console.error(e);
     document.body.className = "offline";
+  } finally {
+    if (my === seq) inflight = false;
   }
 }
 
@@ -349,5 +366,5 @@ $("prompt").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
 });
 tick();
-setInterval(tick, 2000);
+setInterval(() => { if (!inflight) tick(); }, 2000);
 </script></body></html>

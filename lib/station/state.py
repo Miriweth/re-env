@@ -88,7 +88,7 @@ def load_settings():
 def save_settings(d):
     merged = {**load_settings(), **d}
     if set(merged) != set(DEFAULT_SETTINGS):
-        raise ValueError(f"unknown setting: {sorted(set(merged) - set(DEFAULT_SETTINGS))}")
+        raise ValueError("unknown setting")
     if merged["bulk_model"] not in ALIASES:
         raise ValueError("bulk_model must be one of " + ", ".join(ALIASES))
     if not isinstance(merged["offline"], bool):

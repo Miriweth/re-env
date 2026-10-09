@@ -196,7 +196,7 @@ def csp_for(page):
 def serve(port, token):
     global manager, TOKEN, PAGE, CSP
     TOKEN = token
-    PAGE = Path(__file__).with_name("page.html").read_text()
+    PAGE = Path(__file__).with_name("page.html").read_text(encoding="utf-8")
     CSP = csp_for(PAGE)
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)

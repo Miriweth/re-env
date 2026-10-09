@@ -1,123 +1,28 @@
 #!/usr/bin/env python3
-"""re-dash [--port N] — read-only dashboard of ~/re on 127.0.0.1: notes, log tails, mods, ollama ps, VRAM, last re-check."""
+"""re-dash [--port N] — read-only dashboard of ~/re on 127.0.0.1: plan, modlog, issues, mods, ollama ps, VRAM, last re-check."""
 import argparse
 import base64
 import hashlib
 import json
-import os
 import re
-import stat
-import subprocess
-import threading
-import time
+import sys
 import traceback
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-RE_HOME = Path(os.environ.get("RE_HOME") or Path.home() / "re")
-LOG_LINES = 20
-NOTES_CAP = 64 * 1024
-LOG_TAIL_BYTES = 16 * 1024
-STATE_TTL = 1.5
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from station import state  # noqa: E402
 
 
-def sh(*argv):
-    """stdout of a command, or None on any failure."""
-    try:
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=2, stdin=subprocess.DEVNULL)
-        return r.stdout if r.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError):
-        return None
+def api_state(query):
+    game = urllib.parse.parse_qs(query).get("game", [""])[0]
+    return json.dumps({
+        "system": state.system_state(),
+        "game": state.game_files(game) if game in state.games() else None,
+        "status": "idle",
+    }).encode()
 
-
-def read(path, cap, tail=False):
-    """At most cap bytes of a regular file (never a symlink, FIFO or device), or "" otherwise.
-    Head mode marks a cut with a truncated line; tail mode reads the last cap bytes, minus the partial first line."""
-    try:
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
-    except OSError:
-        return ""
-    try:
-        st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode):
-            return ""
-        size = st.st_size
-        start = max(0, size - cap) if tail else 0
-        os.lseek(fd, start, os.SEEK_SET)
-        with os.fdopen(os.dup(fd), "rb") as f:
-            data = f.read(cap + 1)
-    except OSError:
-        return ""
-    finally:
-        os.close(fd)
-    if tail:
-        return (data.split(b"\n", 1)[-1] if start else data).decode(errors="replace")
-    return data[:cap].decode(errors="replace") + ("\n… truncated" if len(data) > cap else "")
-
-
-def mtime(path):
-    try:
-        return path.stat().st_mtime
-    except OSError:
-        return 0
-
-
-def is_real_dir(p):
-    return p.is_dir() and not p.is_symlink()
-
-
-def target(d):
-    mods = d / "mods"
-    names = sorted(m.name for m in mods.iterdir() if is_real_dir(m) and not m.name.startswith(".")) if is_real_dir(mods) else []
-    return {
-        "name": d.name,
-        "notes": read(d / "notes.md", NOTES_CAP),
-        "log": "\n".join(read(d / "log.md", LOG_TAIL_BYTES, tail=True).splitlines()[-LOG_LINES:]),
-        "mods": names,
-        "_t": max(mtime(d / "notes.md"), mtime(d / "log.md"), mtime(d)),
-    }
-
-
-def vram():
-    out = sh("nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits")
-    try:
-        used, total = (int(x) for x in out.splitlines()[0].split(","))
-        return {"used": used, "total": total}
-    except (AttributeError, IndexError, ValueError):
-        return None
-
-
-def state():
-    try:
-        dirs = [d for d in (RE_HOME / "targets").iterdir() if is_real_dir(d)]
-    except OSError:
-        dirs = []
-    targets = sorted((target(d) for d in dirs), key=lambda t: -t["_t"])
-    for t in targets:
-        del t["_t"]
-    last = RE_HOME / "re-check.last"
-    return {
-        "targets": targets,
-        "ollama": sh("ollama", "ps") or "ollama unavailable",
-        "vram": vram(),
-        "recheck": {"text": read(last, NOTES_CAP), "mtime": int(mtime(last))} if last.is_file() else None,
-    }
-
-
-_cache = (0.0, None)
-_cache_lock = threading.Lock()
-
-
-def cached_state():
-    """One scan shared by all clients per STATE_TTL (the lock makes concurrent requests wait for it)."""
-    global _cache
-    with _cache_lock:
-        t, st = _cache
-        if st is None or time.monotonic() - t > STATE_TTL:
-            st = json.dumps(state()).encode()
-            _cache = (time.monotonic(), st)
-        return st
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -129,11 +34,12 @@ class Handler(BaseHTTPRequestHandler):
             if (self.headers.get("Host") or "").lower() not in (f"127.0.0.1:{port}", f"localhost:{port}"):
                 self.send_error(403)  # DNS rebinding
                 return
-            path = urllib.parse.urlsplit(self.path).path
+            url = urllib.parse.urlsplit(self.path)
+            path = url.path
             if path == "/":
                 self.send("text/html; charset=utf-8", PAGE.encode())
             elif path == "/api/state":
-                self.send("application/json", cached_state())
+                self.send("application/json", api_state(url.query))
             else:
                 self.send_error(404)
         except (BrokenPipeError, ConnectionResetError):
@@ -248,57 +154,58 @@ function renderRecheck(rc) {
   }
 }
 
-function renderTarget(t) {
+function renderTarget(t, name) {
   const tile = el("section", "tile");
   const label = el("div", "label");
-  label.append(el("span", "", t.name), el("span", "sub", t.mods.length + " mods"));
+  label.append(el("span", "", name), el("span", "sub", t.mods.length + " mods"));
   tile.append(label);
   for (const m of t.mods) {
     const kv = el("div", "kv");
     kv.append(el("span", "k", "mod"), el("span", "v", m));
     tile.append(kv);
   }
-  const log = el("pre", "", t.log || "no log yet");
-  log.dataset.key = t.name + ":log";
+  const log = el("pre", "", t.modlog_tail || "no modlog yet");
+  log.dataset.key = t.name + ":modlog";
   tile.append(log);
   const d = el("details");
-  d.dataset.name = t.name;
-  const notes = el("pre", "", t.notes || "no notes yet");
-  notes.dataset.key = t.name + ":notes";
-  d.append(el("summary", "", "notes"), notes);
+  d.dataset.name = name;
+  const notes = el("pre", "", (t.plan || t.modlog_facts) || "no plan yet");
+  notes.dataset.key = t.name + ":plan";
+  d.append(el("summary", "", "plan"), notes);
   tile.append(d);
   return tile;
 }
 
-function renderTargets(targets) {
+function renderTargets(targets) { // [[name, game], ...]
   const box = $("targets");
   const open = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.name));
-  const tiles = targets.map(renderTarget);
-  tiles.forEach((tile, i) => { if (open.has(targets[i].name)) tile.querySelector("details").open = true; });
+  const tiles = targets.map(([name, g]) => renderTarget(g, name));
+  tiles.forEach((tile, i) => { if (open.has(targets[i][0])) tile.querySelector("details").open = true; });
   box.replaceChildren(...tiles);
 }
 
-let lastText = "", lastRecheck = null;
+let lastText = "", lastRecheck = null, game = "";
 
 function render(s) {
   const scroll = new Map([...document.querySelectorAll("pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
-  renderVram(s.vram);
-  $("ollama").textContent = s.ollama;
-  renderRecheck(s.recheck);
-  renderTargets(s.targets);
+  renderVram(s.system.vram);
+  $("ollama").textContent = s.system.ollama;
+  renderRecheck(s.system.recheck);
+  renderTargets(s.game ? [[game, s.game]] : []);
   document.querySelectorAll("pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
 }
 
 async function tick() {
   try {
-    const r = await fetch("/api/state", {cache: "no-store"});
+    const r = await fetch("/api/state?game=" + encodeURIComponent(game), {cache: "no-store"});
     if (!r.ok) throw new Error(r.status);
     const text = await r.text();
     if (text !== lastText) {
       const s = JSON.parse(text);
+      if (!game && s.system.games.length) { game = s.system.games[0]; lastText = ""; return tick(); }
       render(s);
       lastText = text;
-      lastRecheck = s.recheck;
+      lastRecheck = s.system.recheck;
     } else if (lastRecheck) {
       $("age").textContent = ago(lastRecheck.mtime);
     }

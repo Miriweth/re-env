@@ -85,8 +85,9 @@ def load_sessions(game):
 
 def save_sessions(game, sessions):
     d = station_dir(game)
-    tmp = d / f".session.json.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps(sessions))
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".session.json.")
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(sessions))
     os.replace(tmp, d / "session.json")
 
 
@@ -131,8 +132,13 @@ class Manager:
             argv = command(backend, game, sid, state.load_settings())
             append(game, "user", backend, data.decode(errors="replace"))
             stderr = tempfile.TemporaryFile()
-            proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
-                                    cwd=state.RE_HOME, env=child_env(), start_new_session=True)
+            try:
+                proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr,
+                                        cwd=state.RE_HOME, env=child_env(), start_new_session=True)
+            except OSError as e:
+                stderr.close()
+                append(game, "error", backend, f"cannot start {argv[0]}: {e}")
+                raise
             run = Run(game, backend, proc)
             run.thread = threading.Thread(target=self._follow, args=(run, data, stderr), daemon=True)
             self.runs[game] = run
@@ -156,6 +162,15 @@ class Manager:
             failed = self._read(run)
             rc = run.proc.wait()
             self._finish(run, failed or rc != 0, rc, stderr)
+        except Exception as e:  # never leave a run stuck in "running"
+            killpg(run.proc, signal.SIGKILL)
+            run.proc.wait()
+            run.error = f"station error: {e!r}"
+            run.status = "failed"
+            try:
+                append(run.game, "error", run.backend, run.error)
+            except OSError:
+                pass
         finally:
             timer.cancel()
             stderr.close()
@@ -182,7 +197,8 @@ class Manager:
                 sessions = load_sessions(game)
                 save_sessions(game, {**sessions, session_key(run.backend): ev["session_id"]})
             elif ev.get("type") == "assistant":
-                content = (ev.get("message") or {}).get("content") or []
+                msg = ev.get("message")
+                content = (msg.get("content") if isinstance(msg, dict) else None) or []
                 for block in content if isinstance(content, list) else []:
                     if not isinstance(block, dict):
                         continue
@@ -237,10 +253,11 @@ class Manager:
     def status(self, game):
         with self._lock:
             run = self.runs.get(game)
-        if not run or run.status == "done":
+        st = run.status if run else "done"
+        if st == "done":
             return {"status": "idle", "since": None, "backend": None, "tool": None}
-        return {"status": run.status, "since": run.started, "backend": run.backend,
-                "tool": run.tool if run.status == "running" else None}
+        return {"status": st, "since": run.started, "backend": run.backend,
+                "tool": run.tool if st == "running" else None}
 
     def wait(self, game, timeout):
         """Join the run's reader thread; True when it has finished."""

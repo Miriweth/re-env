@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -147,9 +148,54 @@ class StationRuns(unittest.TestCase):
         self.assertEqual(self.m.status("Elden")["status"], "failed")
         self.assertIn("timeout after 0.3 s", self.thread()[-1]["text"])
 
+    def test_reader_error_fails_run(self):
+        real, calls = runs.append, []
+
+        def flaky(*a):
+            calls.append(a)
+            if len(calls) == 2:
+                raise OSError("disk full")
+            return real(*a)
+
+        with mock.patch.object(runs, "append", flaky):
+            self.run_once()
+        st = self.m.status("Elden")
+        self.assertEqual(st["status"], "failed")
+        self.assertIn("disk full", self.m.runs["Elden"].error)
+        self.assertEqual(self.thread()[-1]["role"], "error")
+        self.assertIsNotNone(self.m.runs["Elden"].proc.returncode)
+        self.run_once()  # no Busy
+        self.assertEqual(self.m.status("Elden")["status"], "waiting")
+
+    def test_missing_binary_records_error(self):
+        os.environ["PATH"] = str(self.fake_bin)
+        (self.fake_bin / "claude").unlink()
+        with self.assertRaises(OSError):
+            self.m.start("Elden", "claude", "hi")
+        self.assertEqual([e["role"] for e in self.thread()], ["user", "error"])
+        self.assertEqual(self.m.status("Elden")["status"], "idle")
+
+    def test_concurrent_session_saves(self):
+        errors = []
+
+        def hammer(key):
+            try:
+                for i in range(200):
+                    runs.save_sessions("Elden", {key: str(i)})
+            except OSError as e:
+                errors.append(e)
+
+        ts = [threading.Thread(target=hammer, args=(k,)) for k in ("a", "b")]
+        for x in ts:
+            x.start()
+        for x in ts:
+            x.join()
+        self.assertEqual(errors, [])
+        self.assertEqual([p.name for p in (self.game_dir / "station").iterdir()], ["session.json"])
+
     def test_non_json_lines_ignored(self):
         tool = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"um scan\\nmore"}}]}}'
-        self.fake(lines=("not json", INIT, "[1,2]", '{"type":"weird"}', tool, ASSISTANT, "{broken", RESULT))
+        self.fake(lines=("not json", INIT, "[1,2]", '{"type":"weird"}', '{"type":"assistant","message":"x"}', tool, ASSISTANT, "{broken", RESULT))
         self.run_once()
         t = self.thread()
         self.assertEqual([e["role"] for e in t], ["user", "tool", "assistant", "system"])

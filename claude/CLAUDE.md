@@ -111,6 +111,11 @@ are the source of truth; `notes.md` points at them.
 
 ## Local models
 
+Routing is by task type, and you say which model did what. Bulk work, summaries,
+first-pass comments, sorting strings and anything offline go to the local
+models through `ask-local`. Planning, reversing with Ghidra, writing code and
+anything that needs the whole picture stays with Claude.
+
 `ask-local [qwen|deepseek|llama] "prompt" < file` sends text to Ollama. Use it
 for bulk work: first-pass comments on 200 functions, decompiler output into
 pseudocode, sorting strings. Check the results, these models guess.

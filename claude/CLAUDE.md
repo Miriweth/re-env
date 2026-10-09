@@ -5,6 +5,9 @@ tools and mods that come out of it. Claude Code is the main agent, Ghidra is
 reachable over MCP, and local Ollama models take the bulk work. Scripts and
 templates live in `~/Projects/re-env`.
 
+If `HANDOVER.md` exists in this folder, read it first; it carries the state of
+the last session.
+
 ## Purpose
 
 Static and dynamic analysis of game binaries, then mods (proxy DLLs, BepInEx

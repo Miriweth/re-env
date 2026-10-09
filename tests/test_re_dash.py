@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -13,10 +14,16 @@ from pathlib import Path
 
 from unittest import mock
 
-from helpers import BIN, make_fake, run, tmp_home
+from helpers import BIN, make_fake, read_log, run, tmp_home
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 from station import state
+
+
+INIT = '{"type":"system","subtype":"init","session_id":"sid-1"}'
+ASSISTANT = '{"type":"assistant","message":{"content":[{"type":"text","text":"All done."}]}}'
+RESULT = '{"type":"result","is_error":false,"duration_ms":5}'
+OK = object()
 
 
 class ReDash(unittest.TestCase):
@@ -33,16 +40,28 @@ class ReDash(unittest.TestCase):
         (t / "MODLOG.md").write_text("# Elden\n## Facts\nfact one\n## Journal\n" + "".join(f"line {i}\n" for i in range(1, 31)))
         make_fake(self.fake_bin, "ollama", 'echo "NAME  ID"; echo "qwen  abc"')
         make_fake(self.fake_bin, "nvidia-smi", 'echo "4096, 16384"; echo "1, 2"')
+        self.log = root / "claude.log"
+        self.fake_claude()
+
+    def fake_claude(self, pre=""):
+        # the station passes children a minimal env (no FAKE_LOG), so the log path is baked in
+        out = "\n".join(f"echo '{x}'" for x in (INIT, ASSISTANT, RESULT))
+        make_fake(self.fake_bin, "claude", f'echo "claude $*" >> "{self.log}"\ncat > /dev/null\n{pre}\n{out}')
 
     def start(self, *args):
-        env = dict(os.environ, RE_HOME=str(self.re_home), PATH=f"{self.fake_bin}:{os.environ['PATH']}")
+        self.runtime = Path(self.tmp.name) / "run"
+        self.runtime.mkdir(exist_ok=True)
+        env = dict(os.environ, RE_HOME=str(self.re_home), PATH=f"{self.fake_bin}:{os.environ['PATH']}",
+                   XDG_RUNTIME_DIR=str(self.runtime))
         p = subprocess.Popen([str(BIN / "re-dash"), "--port", "0", *args], env=env,
                              stdout=subprocess.PIPE, text=True)
+        self.addCleanup(p.stdout.close)
         self.addCleanup(p.wait)
         self.addCleanup(p.terminate)
         line = p.stdout.readline().strip()
-        m = re.fullmatch(r"re-dash on (http://127\.0\.0\.1:(\d+))", line)
+        m = re.fullmatch(r"re-dash on (http://127\.0\.0\.1:(\d+))/#([A-Za-z0-9_-]+)", line)
         self.assertIsNotNone(m, line)
+        self.token = m.group(3)
         return m.group(1)
 
     def state(self, url, game="Elden"):
@@ -162,6 +181,7 @@ class ReDash(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError, msg=path) as c:
                 urllib.request.urlopen(url + path, timeout=5)
             self.assertEqual(c.exception.code, 404, path)
+            c.exception.close()
 
     def get(self, url, path, host=None):
         c = http.client.HTTPConnection("127.0.0.1", int(url.rsplit(":", 1)[1]), timeout=5)
@@ -256,6 +276,136 @@ class ReDash(unittest.TestCase):
         page = self.get(self.start(), "/").body.decode()
         self.assertIn("scrollTop", page)
         self.assertIn("lastText", page)
+
+    def post(self, url, path, body, token=OK, origin=OK, host=OK, ctype=OK):
+        port = url.rsplit(":", 1)[1]
+        data = body if isinstance(body, bytes) else json.dumps(body).encode()
+        headers = {"Host": f"127.0.0.1:{port}" if host is OK else host,
+                   "Origin": f"http://127.0.0.1:{port}" if origin is OK else origin,
+                   "Content-Type": "application/json" if ctype is OK else ctype,
+                   "Authorization": f"Bearer {self.token}" if token is OK else token and f"Bearer {token}"}
+        headers = {k: v for k, v in headers.items() if v is not None}
+        c = http.client.HTTPConnection("127.0.0.1", int(port), timeout=5)
+        c.request("POST", path, body=data, headers=headers)
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        self.assertFalse(any(k.lower().startswith("access-control-") for k in r.headers), r.headers)
+        try:
+            return r.status, json.loads(raw)
+        except ValueError:
+            return r.status, None
+
+    def until(self, cond, timeout=10):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if cond():
+                return
+            time.sleep(0.1)
+        self.fail("condition not reached")
+
+    def run_body(self, **kw):
+        return {"game": "Elden", "backend": "claude", "prompt": "hello", **kw}
+
+    def assert_rejected(self, code, **kw):
+        url = self.start()
+        body = kw.pop("body", self.run_body())
+        self.assertEqual(self.post(url, "/api/run", body, **kw)[0], code)
+        time.sleep(0.2)
+        self.assertEqual(read_log(self.log), [])
+
+    def test_token_file_private(self):
+        self.start()
+        f = self.runtime / "re-dash.token"
+        self.assertEqual(f.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(f.read_text().strip(), self.token)
+
+    def test_run_starts_fake_claude(self):
+        url = self.start()
+        code, body = self.post(url, "/api/run", self.run_body())
+        self.assertEqual(code, 202)
+        self.assertTrue(body["id"].startswith("Elden:"))
+        self.until(lambda: len(self.state(url)["game"]["thread"]) >= 3)
+        self.assertEqual(self.state(url)["game"]["thread"][1]["text"], "All done.")
+        self.assertEqual(self.log.read_text().count("claude -p"), 1)
+
+    def test_post_without_token(self):
+        self.assert_rejected(403, token=None)
+
+    def test_post_wrong_token(self):
+        self.assert_rejected(403, token="x" * 43)
+
+    def test_post_wrong_origin(self):
+        self.assert_rejected(403, origin="http://evil.example")
+
+    def test_post_without_origin(self):
+        self.assert_rejected(403, origin=None)
+
+    def test_post_wrong_content_type(self):
+        self.assert_rejected(403, ctype="text/plain")
+
+    def test_post_foreign_host(self):
+        self.assert_rejected(403, host="evil.example", origin="http://evil.example")
+
+    def test_post_too_large(self):
+        self.assert_rejected(413, body=self.run_body(prompt="x" * 17000))
+
+    def test_post_bad_json(self):
+        self.assert_rejected(400, body=b"[1, 2]")
+
+    def test_post_unknown_game(self):
+        self.assert_rejected(400, body=self.run_body(game="nope"))
+
+    def test_post_symlinked_game(self):
+        other = Path(self.tmp.name) / "other"
+        other.mkdir()
+        (self.re_home / "targets" / "Linked").symlink_to(other)
+        self.assert_rejected(400, body=self.run_body(game="Linked"))
+
+    def test_post_unknown_backend(self):
+        self.assert_rejected(400, body=self.run_body(backend="bash"))
+
+    def test_post_empty_prompt(self):
+        self.assert_rejected(400, body=self.run_body(prompt=""))
+
+    def test_settings_roundtrip(self):
+        url = self.start()
+        code, saved = self.post(url, "/api/settings", {"offline": True, "bulk_model": "llama"})
+        self.assertEqual(code, 200)
+        self.assertEqual(saved, {"bulk_model": "llama", "offline": True, "default_backend": "auto"})
+        with urllib.request.urlopen(url + "/api/settings", timeout=5) as r:
+            self.assertEqual(json.load(r), saved)
+
+    def test_settings_rejects_bad_backend(self):
+        url = self.start()
+        self.assertEqual(self.post(url, "/api/settings", {"default_backend": "bash"})[0], 400)
+        self.assertEqual(self.post(url, "/api/settings", {"default_backend": "auto"}, token="x")[0], 403)
+        self.assertFalse((self.re_home / "station.json").exists())
+
+    def test_cancel_and_reset(self):
+        self.fake_claude(pre="sleep 30 & wait")
+        url = self.start()
+        self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 202)
+        self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 409)
+        self.assertEqual(self.post(url, "/api/cancel", {"game": "Elden"}), (200, {"ok": True}))
+        self.until(lambda: self.state(url)["status"] == "idle")
+        self.assertEqual(self.post(url, "/api/cancel", {"game": "Elden"}), (200, {"ok": False}))
+        self.assertEqual(self.post(url, "/api/cancel", {"game": "nope"})[0], 400)
+        self.assertEqual(self.post(url, "/api/reset", {"game": "Elden"}), (200, {"ok": True}))
+        thread = self.state(url)["game"]["thread"]
+        self.assertEqual([e["text"] for e in thread[-2:]], ["cancelled", "new conversation"])
+        self.assertEqual(self.post(url, "/api/reset", {"game": "nope"})[0], 400)
+
+    def test_state_status_running(self):
+        self.fake_claude(pre="sleep 30 & wait")
+        url = self.start()
+        self.assertEqual(self.state(url)["status"], "idle")
+        self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 202)
+        self.assertEqual(self.state(url)["status"], "running")
+        self.assertEqual(self.state(url, "nope")["status"], "idle")
+
+    def test_post_unknown_route(self):
+        self.assertEqual(self.post(self.start(), "/api/nope", {})[0], 404)
 
 
 class StateUnit(unittest.TestCase):

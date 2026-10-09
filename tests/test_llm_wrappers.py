@@ -40,7 +40,7 @@ class ClaudeLocal(FakesMixin, unittest.TestCase):
     def test_default_model_and_env(self):
         r = self.call("claude-local")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls(), ["claude --model qwen2.5-coder:14b"])
+        self.assertEqual(self.calls(), ["claude --model huihui_ai/qwen2.5-coder-abliterate:14b"])
         env = self.env_lines()
         self.assertEqual(env["ANTHROPIC_BASE_URL"], OLLAMA_URL)
         self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "ollama")
@@ -48,16 +48,16 @@ class ClaudeLocal(FakesMixin, unittest.TestCase):
 
     def test_shortname_resolves(self):
         self.call("claude-local", "llama")
-        self.assertEqual(self.calls(), ["claude --model llama3.1:8b"])
+        self.assertEqual(self.calls(), ["claude --model mannix/llama3.1-8b-abliterated"])
 
     def test_dash_first_arg_uses_default(self):
         self.call("claude-local", "-p", "hi")
-        self.assertEqual(self.calls(), ["claude --model qwen2.5-coder:14b -p hi"])
+        self.assertEqual(self.calls(), ["claude --model huihui_ai/qwen2.5-coder-abliterate:14b -p hi"])
 
-    def test_deepseek_refused(self):
-        r = self.call("claude-local", "deepseek")
+    def test_qwen3_refused(self):
+        r = self.call("claude-local", "qwen3")
         self.assertEqual(r.returncode, 1)
-        self.assertIn("no tool calling", r.stderr)
+        self.assertIn("ask-local", r.stderr)
         self.assertEqual(self.calls(), [])
 
     def test_missing_claude_cli_is_named(self):
@@ -78,13 +78,13 @@ class AskLocal(FakesMixin, unittest.TestCase):
     def test_single_arg_is_prompt(self):
         r = self.call("ask-local", "erkläre")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls(), ["ollama run qwen2.5-coder:14b"])
+        self.assertEqual(self.calls(), ["ollama run huihui_ai/qwen2.5-coder-abliterate:14b"])
         self.assertEqual(self.stdin_file.read_text(), "erkläre\n")
 
     def test_model_prompt_and_stdin(self):
-        r = self.call("ask-local", "deepseek", "kommentiere", stdin="int f(){}")
+        r = self.call("ask-local", "qwen3", "kommentiere", stdin="int f(){}")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls(), ["ollama run deepseek-coder-v2:16b"])
+        self.assertEqual(self.calls(), ["ollama run huihui_ai/qwen3-abliterated:14b"])
         self.assertEqual(self.stdin_file.read_text(), "kommentiere\n\nint f(){}\n")
 
     def test_large_stdin_passes(self):

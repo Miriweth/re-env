@@ -18,7 +18,7 @@ plugins) and Linux side tools that read game memory. Nothing else.
 `targets/<game>/` holds one game, created with `re-new <game>`:
 
 - `notes.md` collects everything learned: offsets, structs, function names, open questions.
-- `log.md` gets one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, deepseek, llama).
+- `log.md` gets one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, qwen3, llama).
 - `ghidra/` is the Ghidra project, `dumps/` holds metadata and memory dumps, `mods/` the mods.
 
 `tools/` has x64dbg, Il2CppDumper, BepInEx and the GhydraMCP bridge.
@@ -123,12 +123,11 @@ first-pass comments, sorting strings and anything offline go to the local
 models through `ask-local`. Planning, reversing with Ghidra, writing code and
 anything that needs the whole picture stays with Claude.
 
-`ask-local [qwen|deepseek|llama] "prompt" < file` sends text to Ollama. Use it
+`ask-local [qwen|qwen3|llama] "prompt" < file` sends text to Ollama. Use it
 for bulk work: first-pass comments on 200 functions, decompiler output into
 pseudocode, sorting strings. Check the results, these models guess.
 
-`deepseek` has no tool calling. It works with `ask-local` only, never as the
-agent. `claude-local [qwen|llama]` runs Claude Code offline against Ollama.
+`qwen3` is for `ask-local` only, never as the agent. `claude-local [qwen|llama]` runs Claude Code offline against Ollama.
 
 When a step cannot go through the API (offline, out of quota, or Claude Code
 declines it), the user runs that step with `claude-local`, or hands the piece to

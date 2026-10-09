@@ -94,10 +94,10 @@ user_workspace() {
 }
 
 user_models() {
-    echo "Pulling three models, about 23 GB."
-    ollama pull qwen2.5-coder:14b
-    ollama pull deepseek-coder-v2:16b
-    ollama pull llama3.1:8b
+    echo "Pulling three models, about 20 GB."
+    ollama pull huihui_ai/qwen2.5-coder-abliterate:14b
+    ollama pull huihui_ai/qwen3-abliterated:14b
+    ollama pull mannix/llama3.1-8b-abliterated
 }
 
 phase_user() {

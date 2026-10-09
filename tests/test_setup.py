@@ -105,8 +105,8 @@ class CommonLib(unittest.TestCase):
         return run(["bash", "-c", f'source "{REPO}/lib/common.sh"; {snippet}'], env=env)
 
     def test_resolve_model(self):
-        for short, tag in (("qwen", "qwen2.5-coder:14b"), ("deepseek", "deepseek-coder-v2:16b"),
-                           ("llama", "llama3.1:8b"), ("foo:1b", "foo:1b")):
+        for short, tag in (("qwen", "huihui_ai/qwen2.5-coder-abliterate:14b"), ("qwen3", "huihui_ai/qwen3-abliterated:14b"),
+                           ("llama", "mannix/llama3.1-8b-abliterated"), ("foo:1b", "foo:1b")):
             r = self.bash(f"resolve_model {short}")
             self.assertEqual(r.stdout.strip(), tag)
 
@@ -114,7 +114,7 @@ class CommonLib(unittest.TestCase):
         r = self.bash('echo "$RE_ENV|$RE_HOME|$LOCAL_BIN|$OLLAMA_URL|$DEFAULT_MODEL"',
                       env={"HOME": "/h"})
         self.assertEqual(r.stdout.strip(),
-                         f"{REPO}|/h/re|/h/.local/bin|http://localhost:11434|qwen2.5-coder:14b")
+                         f"{REPO}|/h/re|/h/.local/bin|http://localhost:11434|huihui_ai/qwen2.5-coder-abliterate:14b")
 
     def test_die_and_usage_die(self):
         r = self.bash("die kaputt")
@@ -166,14 +166,16 @@ class UserPhase(unittest.TestCase):
             self.assertTrue(link.is_symlink(), script.name)
             self.assertEqual(link.resolve(), script.resolve())
 
-    def test_user_models_pulls_three(self):
+    def test_setup_pulls_new_tags(self):
         make_fake(self.fake_bin, "ollama")
         r = run([SETUP, "user:models"], env=self.env, fake_bin=self.fake_bin)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("23 GB", r.stdout)
-        self.assertEqual(read_log(self.log), ["ollama pull qwen2.5-coder:14b",
-                                              "ollama pull deepseek-coder-v2:16b",
-                                              "ollama pull llama3.1:8b"])
+        self.assertIn("20 GB", r.stdout)
+        self.assertEqual(read_log(self.log), ["ollama pull huihui_ai/qwen2.5-coder-abliterate:14b",
+                                              "ollama pull huihui_ai/qwen3-abliterated:14b",
+                                              "ollama pull mannix/llama3.1-8b-abliterated"])
+        for old in ("qwen2.5-coder:14b", "deepseek-coder-v2:16b", "llama3.1:8b"):
+            self.assertNotIn(old, "\n".join(read_log(self.log)))
 
     def test_user_dirs(self):
         r = run([SETUP, "user:dirs"], env=self.env)

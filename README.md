@@ -53,8 +53,10 @@ Templates in `templates/`: `dll-proxy-c` (version.dll, MinHook),
 `dll-proxy-rust` (dinput8.dll), `bepinex-plugin` (Unity Mono), `memreader-py`
 (procfs memory reader for overlays and feeds).
 
-Models: `qwen2.5-coder:14b` as the default, `llama3.1:8b` for quick jobs,
-`deepseek-coder-v2:16b` for bulk work without tool calls.
+Models (uncensored): `qwen` (`qwen2.5-coder-abliterate:14b`) is the default, `llama`
+(`llama3.1-8b-abliterated`) for quick jobs, `qwen3` (`qwen3-abliterated:14b`) is
+ask-local only (no agent use). Old tags go with
+`ollama rm qwen2.5-coder:14b deepseek-coder-v2:16b llama3.1:8b`.
 
 ## Docs
 

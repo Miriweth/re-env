@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-MODELS=(qwen2.5-coder:14b deepseek-coder-v2:16b llama3.1:8b)
+MODELS=(huihui_ai/qwen2.5-coder-abliterate:14b huihui_ai/qwen3-abliterated:14b mannix/llama3.1-8b-abliterated)
 
 check_gpu() {
     local name
@@ -54,13 +54,13 @@ check_anthropic() {
     local resp
     resp="$(curl -sf -m 180 "$OLLAMA_URL/v1/messages" \
         -H 'content-type: application/json' -H 'x-api-key: ollama' -H 'anthropic-version: 2023-06-01' \
-        -d '{"model":"llama3.1:8b","max_tokens":8,"messages":[{"role":"user","content":"ok"}]}')" \
+        -d '{"model":"mannix/llama3.1-8b-abliterated","max_tokens":8,"messages":[{"role":"user","content":"ok"}]}')" \
         || { echo "POST /v1/messages failed"; return 2; }
     grep -q '"type":"message"' <<<"$resp" || { echo "unexpected answer from /v1/messages"; return 2; }
-    if ollama ps 2>/dev/null | awk 'NR > 1 && $1 == "llama3.1:8b"' | grep -q '100% GPU'; then
-        echo "/v1/messages answers, llama3.1:8b runs on the GPU"
+    if ollama ps 2>/dev/null | awk 'NR > 1 && $1 == "mannix/llama3.1-8b-abliterated"' | grep -q '100% GPU'; then
+        echo "/v1/messages answers, mannix/llama3.1-8b-abliterated runs on the GPU"
     else
-        echo "/v1/messages answers, but llama3.1:8b runs on the CPU"; return 1
+        echo "/v1/messages answers, but mannix/llama3.1-8b-abliterated runs on the CPU"; return 1
     fi
 }
 

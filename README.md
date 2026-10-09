@@ -41,7 +41,7 @@ Commands, linked into `~/.local/bin`:
 
 - `re-new <game> [template [name]]` creates `~/re/targets/<game>/` and copies a mod template into it.
 - `re-check [--full]` checks the whole chain and names the setup step for anything that fails.
-- `re-dash [--port N]` serves a read-only dashboard on `127.0.0.1:8780` with notes, log tails, mods, `ollama ps`, VRAM and the last `re-check`.
+- `re-dash [--port N]` is the command station on `127.0.0.1:8780`: give Claude a request per game and watch the files it keeps (see Command station).
 - `claude-local [model]` runs Claude Code against Ollama instead of the Anthropic API.
 - `ask-local [model] "prompt" < file` sends text to a local model, for bulk work.
 - `llm-off` unloads all models from VRAM, for before you start a game.
@@ -57,6 +57,26 @@ Models (uncensored): `qwen` (`qwen2.5-coder-abliterate:14b`) is the default, `ll
 (`llama3.1-8b-abliterated`) for quick jobs, `qwen3` (`qwen3-abliterated:14b`) is
 ask-local only (no agent use). Old tags go with
 `ollama rm qwen2.5-coder:14b deepseek-coder-v2:16b llama3.1:8b`.
+
+## Command station
+
+```
+re-dash
+```
+
+prints `re-dash on http://127.0.0.1:8780/#<token>`. Open exactly that URL; the
+token sits in the fragment (also in `$XDG_RUNTIME_DIR/re-dash.token`). Pick a
+game, type a request, choose a backend (`auto`: Claude routes; `claude`;
+`claude-local:qwen|llama`; `ask-local:qwen|qwen3|llama`) and Send. The Recon,
+Mod and Field note buttons fill canned prompts. Settings (`bulk_model`,
+`offline`, `default_backend`) are stored in `~/re/station.json`. A run is
+`claude -p --permission-mode bypassPermissions` in `~/re` with
+`ECC_GATEGUARD=off`, one run per game; Cancel stops it, New conversation starts
+a fresh thread (`targets/<game>/station/thread.jsonl`).
+
+Each game in `~/re/targets/<game>/` has `MODDING_PLAN.md` (recon result),
+`MODLOG.md` (Facts and Journal), `issues.md`, `station/`, `ghidra/`, `dumps/`
+and `mods/`.
 
 ## Docs
 

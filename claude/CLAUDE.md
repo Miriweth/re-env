@@ -17,14 +17,29 @@ plugins) and Linux side tools that read game memory. Nothing else.
 
 `targets/<game>/` holds one game, created with `re-new <game>`:
 
-- `notes.md` collects everything learned: offsets, structs, function names, open questions.
-- `log.md` gets one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, qwen3, llama).
-- `ghidra/` is the Ghidra project, `dumps/` holds metadata and memory dumps, `mods/` the mods.
+- `MODDING_PLAN.md` is the recon result: install, engine, anti-cheat facts, saves, plan.
+- `MODLOG.md` has `## Facts` (versions, paths, IDs, offsets as module+RVA or pointer chain, kept current) and `## Journal`, one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, qwen3, llama). Log failures with cause and how you verified.
+- `issues.md` lists problems: `- [ ] problem` while open, `- [x] problem → fix` when solved.
+- `station/` holds the re-dash thread and session; leave it alone.
+- `ghidra/` is the Ghidra project, `dumps/` holds decompiles and memory dumps, `mods/` the mods.
 
 `tools/` has x64dbg, Il2CppDumper, BepInEx and the GhydraMCP bridge.
 
-`re-dash` serves a read-only view at 127.0.0.1:8780: notes, log tails, mods,
-`ollama ps`, VRAM and the last `re-check`.
+The command station. `re-dash [--port N]` prints
+`re-dash on http://127.0.0.1:8780/#<token>`; open exactly that URL (the token
+is in the fragment, also in `$XDG_RUNTIME_DIR/re-dash.token`). Pick a game, type
+a request, choose a backend (`auto`: Claude routes; `claude`;
+`claude-local:qwen|llama`; `ask-local:qwen|qwen3|llama`) and Send. Recon / Mod /
+Field note buttons fill canned prompts. Settings (`bulk_model`, `offline`,
+`default_backend`) live in `~/re/station.json`. A run is
+`claude -p --permission-mode bypassPermissions` in `~/re` with
+`ECC_GATEGUARD=off`, one run per game; the thread is
+`targets/<game>/station/thread.jsonl`. When you need the user, end with
+`FRAGE: …` lines and stop. Use the ECC agents: `tdd-guide` for code,
+`code-reviewer` after, `build-error-resolver` on build failures.
+
+Terminal and station behave alike: the station gives Claude the same rules
+(`lib/station/prompt.md`).
 
 Start Claude Code from `~/re`. `.mcp.json` lives there; from a subfolder the
 Ghidra connection is missing.
@@ -32,41 +47,46 @@ Ghidra connection is missing.
 ## Requests
 
 The user asks in plain words: "make a sidehud feed for X", "find where X keeps
-the player's health", "a mod for X that hooks Y". Do the whole job; ask only for
-the two things below. Order of work:
+the player's health", "a mod for X that hooks Y". Do the whole job with the
+universal-modder loop; re-env tools are the means. Order of work:
 
-1. Find the game: `protontricks -l` for the app id; the install folder is
+1. `game-recon`: find the game (`protontricks -l` for the app id; install folder
    `steamapps/common/<Game>` inside one of the Steam library folders listed in
-   `~/.steam/steam/steamapps/libraryfolders.vdf` (on this machine that includes
-   `/mnt/SSD1/Steam`), the Proton prefix is
-   `<library>/steamapps/compatdata/<appid>/pfx`. Then the exe. There is no
-   anti-cheat check; folder markers are unreliable and the user decides.
-2. `re-new <game>`, then engine: `*_Data/Managed/Assembly-CSharp.dll` is Unity
-   Mono (ILSpy, BepInEx), `GameAssembly.dll` is IL2CPP (`il2cppdumper`, then
-   Ghidra), `Binaries/Win64/*-Shipping.exe` is Unreal (UE4SS, see
-   `docs/ue4ss.md`), anything else is native (Ghidra).
-3. Public sources before reversing from scratch. Someone has usually done the
+   `~/.steam/steam/steamapps/libraryfolders.vdf`, on this machine including
+   `/mnt/SSD1/Steam`; Proton prefix `<library>/steamapps/compatdata/<appid>/pfx`),
+   `re-new <game>`, `um scan`, engine (`*_Data/Managed/Assembly-CSharp.dll` is
+   Unity Mono, `GameAssembly.dll` is IL2CPP, `Binaries/Win64/*-Shipping.exe` is
+   Unreal, see `docs/ue4ss.md`, anything else native). Anti-cheat: state what
+   you found (`docs/anti-cheat.md`), no verdict, the user decides. Write
+   `MODDING_PLAN.md`. Decompile by engine into `dumps/` without asking: Unity
+   Mono `ilspycmd`, IL2CPP `il2cppdumper`, Unreal Dumper-7 via `dll-proxy-c`,
+   native Ghidra headless.
+2. Public sources before reversing from scratch. Someone has usually done the
    first pass: the game's thread on unknowncheats.me (and its Unreal Engine
    section for GWorld, GNames and GObjects patterns per engine version), SDK
    dumps on GitHub, Cheat Engine tables on fearlessrevolution.com. Offsets are
    tied to a game version; take them as a starting point, verify with
-   `find_offset.py`, and write the source and version into `notes.md`. Claude
+   `find_offset.py`, and write the source and version into `MODLOG.md` Facts. Claude
    Code cannot open unknowncheats.me itself; ask the user to look and paste.
    For Unreal games the reliable route is an SDK dump: Dumper-7 is a DLL that
    writes the whole SDK with offsets when loaded into the game; the
    `dll-proxy-c` template can load it from `mod_main` with `LoadLibraryA`.
-4. Static next. Ghidra over MCP, strings and imports, name what you understand.
-   For a value like health or position, look for the code that reads it (damage,
-   HUD drawing, movement) and follow the pointer chain back to a static base
-   in the module. Ask `ask-local` to pre-sort large batches.
-5. Dynamic when static does not settle it. Ask the user to start the game, run
-   `llm-off` before that. Then, from the game's `mods/<feed>/` folder,
-   `uv run find_offset.py position` for the player position or
-   `uv run find_offset.py value <hud value>` for a stat; it drives scanmem and
-   only asks the user to stand still, move, or read the HUD. It prints a
-   CONFIG snippet at the end. Convert every found address into module + RVA or a pointer
-   chain from the module base; absolute addresses die with the next launch.
-6. Build from a template with `re-new <game> <template> <name>`. For a sidehud
+3. `mod-any-game` loop: lab and backup first (`um backup`), find the source of
+   truth, build a vertical slice with `re-new <game> <template> [name]`, verify
+   in the game.
+4. `reverse-engineering` for Ghidra and memory. Static first: Ghidra over MCP,
+   strings and imports, name what you understand. For a value like health or
+   position, look for the code that reads it (damage, HUD drawing, movement)
+   and follow the pointer chain back to a static base in the module. Ask
+   `ask-local` to pre-sort large batches. Dynamic when static does not settle
+   it: ask the user to start the game, run `llm-off` before that. Then, from
+   the game's `mods/<feed>/` folder, `uv run find_offset.py position` for the
+   player position or `uv run find_offset.py value <hud value>` for a stat; it
+   drives scanmem and only asks the user to stand still, move, or read the HUD.
+   It prints a CONFIG snippet at the end. Convert every found address into
+   module + RVA or a pointer chain from the module base; absolute addresses die
+   with the next launch.
+   Build from a template with `re-new <game> <template> <name>`. For a sidehud
    feed that is `memreader-py`: fill `CONFIG` in `feed.py` (exe, module, chains,
    type, map, stats), run `uv run feed.py --fake` first to prove the pipeline,
    then `uv run feed.py` with the game, and check `curl -s localhost:8765/api/map`
@@ -93,16 +113,18 @@ the two things below. Order of work:
      enough to check the axes.
    - Other markers (enemies, NPCs) are entity arrays: find one, then the
      stride and count, and emit them as `kind: other` with a stable `id`.
-7. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
+5. A sidehud panel goes into `~/Projects/sidehud/sidehud/static/games/<game>.js`,
    following that repo's `AGENTS.md` and `docs/plugin-spec.md`. The spec allows
    senders that read game memory, so a finished feed can move to
    `~/Projects/sidehud/games/<game>/` with its own README, like `games/stardew/`.
-8. Append a line to `log.md` after every step. Write `notes.md` as you go, not at the end: what, where (module + RVA or
-   chain), how you know. Finish with what works, what is still guessed, and the
-   exact commands to run it.
+6. `share-field-notes` at the end: `um kb new`, `um kb check`; open a PR only
+   when the user says so. Write `MODLOG.md` as you go, not at the end: what,
+   where (module + RVA or chain), how you know. Finish with what works, what
+   is still guessed, and the exact commands to run it.
 
 Ask the user only to start the game and to change values on cue. Everything
-else, decide and do.
+else, decide and do. When you need the user, end your answer with lines
+`FRAGE: …` and stop; the station shows them and waits.
 
 ## Ghidra via MCP
 
@@ -112,9 +134,9 @@ listens on port 8192.
 On a fresh binary, look at strings and imports first, find the entry points,
 then name functions and set types. Wide before deep.
 
-Write every finding into `targets/<game>/notes.md` right away, with address,
+Write every finding into `targets/<game>/MODLOG.md` (Facts) right away, with address,
 RVA, name and how you know. Nothing stays only in the chat. Renames in Ghidra
-are the source of truth; `notes.md` points at them.
+are the source of truth; `MODLOG.md` points at them.
 
 ## Local models
 
@@ -123,11 +145,14 @@ first-pass comments, sorting strings and anything offline go to the local
 models through `ask-local`. Planning, reversing with Ghidra, writing code and
 anything that needs the whole picture stays with Claude.
 
+Aliases: `qwen` (default, agent-capable), `llama` (fast, agent-capable), `qwen3`
+(`ask-local` only, no tool calling in the agent).
+
 `ask-local [qwen|qwen3|llama] "prompt" < file` sends text to Ollama. Use it
 for bulk work: first-pass comments on 200 functions, decompiler output into
 pseudocode, sorting strings. Check the results, these models guess.
 
-`qwen3` is for `ask-local` only, never as the agent. `claude-local [qwen|llama]` runs Claude Code offline against Ollama.
+`claude-local [qwen|llama]` runs Claude Code offline against Ollama.
 
 When a step cannot go through the API (offline, out of quota, or Claude Code
 declines it), the user runs that step with `claude-local`, or hands the piece to

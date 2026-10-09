@@ -194,7 +194,7 @@ class ClaudeMd(unittest.TestCase):
         txt = (REPO / "claude/CLAUDE.md").read_text()
         heads = [l[3:].strip() for l in txt.splitlines() if l.startswith("## ")]
         self.assertEqual(heads, ["Purpose", "Layout", "Requests", "Ghidra via MCP", "Local models", "Mod loop", "Rules"])
-        for s in ("notes.md", "ask-local", "llm-off", "re-new", "PROTON_LOG=1", "docs/anti-cheat.md", "anti-cheat"):
+        for s in ("MODLOG.md", "ask-local", "llm-off", "re-new", "PROTON_LOG=1", "docs/anti-cheat.md", "anti-cheat"):
             self.assertIn(s, txt)
 
 

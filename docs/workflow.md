@@ -44,8 +44,8 @@ Create the target:
 re-new <game>
 ```
 
-This makes `~/re/targets/<game>/` with `notes.md`, `ghidra/`, `dumps/` and
-`mods/`. Write into `notes.md` from the first minute: which exe, which engine,
+This makes `~/re/targets/<game>/` with `MODDING_PLAN.md`, `MODLOG.md`, `issues.md`,
+`station/`, `ghidra/`, `dumps/` and `mods/`. Write into `MODLOG.md` from the first minute: which exe, which engine,
 which version. Everything you find later goes there too. Findings that only
 exist in a chat window are gone by tomorrow.
 
@@ -87,7 +87,7 @@ A way through an unknown binary that has worked for me:
 3. Find the loop. Games have a main loop; everything you care about hangs off
    it. Start from the entry point or from a render or input import and walk up.
 4. Name as you go. Every function you understand gets a name in Ghidra, every
-   struct you recognize gets a type. Ghidra is the source of truth; `notes.md`
+   struct you recognize gets a type. Ghidra is the source of truth; `MODLOG.md`
    holds the address, the RVA (address minus image base) and how you know.
 5. Let the local model do the boring part. Decompiler output of two hundred
    functions is a job for `ask-local`, not for you and not for the Claude API:
@@ -196,14 +196,16 @@ the game, read `mod.log` (or `BepInEx/LogOutput.log`) in the game folder.
 
 ## Local models
 
-Three models are installed. `qwen2.5-coder:14b` is the default for anything
-with code. `llama3.1:8b` is faster and fine for summaries. `deepseek-coder-v2:16b`
-is quick for bulk work but cannot do tool calls, so only `ask-local` accepts it.
+Three models are installed. `qwen` (`huihui_ai/qwen2.5-coder-abliterate:14b`) is the
+default for anything with code and can be the agent. `llama`
+(`mannix/llama3.1-8b-abliterated`) is faster and fine for summaries, also
+agent-capable. `qwen3` (`huihui_ai/qwen3-abliterated:14b`) cannot do tool calls, so only
+`ask-local` accepts it.
 
 ```
 claude-local                 # Claude Code against qwen, offline
 claude-local llama -p "..."  # one-shot with llama
-ask-local deepseek "Comment this" < func.c
+ask-local qwen3 "Comment this" < func.c
 ```
 
 `claude-local` sets the Anthropic environment variables to point at Ollama and

@@ -22,11 +22,12 @@ minutes and `llm-off` drops them on the spot.
 
 ## Model roles
 
-`qwen2.5-coder:14b` supports tool calls and is the default behind
-`claude-local`. `llama3.1:8b` is smaller and faster for summaries.
-`deepseek-coder-v2:16b` is a mixture of experts with 2.4B active parameters,
-quick for bulk work, but its Ollama template has no tool calling, so it can
-only be reached through `ask-local`. Claude Code talks to Ollama directly since
+`qwen` (`huihui_ai/qwen2.5-coder-abliterate:14b`) supports tool calls and is the
+default behind `claude-local`. `llama` (`mannix/llama3.1-8b-abliterated`) is
+smaller and faster for summaries and also supports tool calls. `qwen3`
+(`huihui_ai/qwen3-abliterated:14b`) is quick for bulk work, but its Ollama
+template has no tool calling, so it can only be reached through `ask-local`.
+Claude Code talks to Ollama directly since
 Ollama 0.14 added the Anthropic Messages API; no proxy in between.
 
 ## Ghidra from pacman, Ghydra pinned to it

@@ -17,31 +17,35 @@ class ReNew(unittest.TestCase):
     def target(self, game="Elden"):
         return self.re_home / "targets" / game
 
-    def test_creates_layout_and_notes(self):
+    def test_creates_layout_and_files(self):
         r = self.call("Elden")
         self.assertEqual(r.returncode, 0, r.stderr)
-        for d in ("ghidra", "dumps", "mods"):
+        for d in ("ghidra", "dumps", "mods", "station"):
             self.assertTrue((self.target() / d).is_dir(), d)
-        notes = (self.target() / "notes.md").read_text()
-        self.assertTrue(notes.startswith("# Elden\n"), notes[:40])
-        for h in ("## Binary", "## Findings", "## Offsets", "## Mods"):
-            self.assertIn(h, notes)
+        plan = (self.target() / "MODDING_PLAN.md").read_text()
+        self.assertTrue(plan.startswith("# Elden modding plan\n"), plan[:40])
+        for h in ("- Install:", "- Engine:", "- Anti-cheat / online:",
+                  "- Chosen route for", "- Unknowns to resolve first:"):
+            self.assertIn(h, plan)
+        modlog = (self.target() / "MODLOG.md").read_text()
+        self.assertTrue(modlog.startswith("# Elden\n"), modlog[:40])
+        for h in ("## Facts", "## Journal"):
+            self.assertIn(h, modlog)
+        issues = (self.target() / "issues.md").read_text()
+        self.assertTrue(issues.startswith("# Elden issues\n"), issues[:40])
+        for old in ("notes.md", "log.md"):
+            self.assertFalse((self.target() / old).exists(), old)
         self.assertIn(str(self.target()), r.stdout)
 
-    def test_never_overwrites_notes(self):
+    def test_never_overwrites(self):
         self.call("Elden")
-        (self.target() / "notes.md").write_text("KEEP")
+        names = ("MODDING_PLAN.md", "MODLOG.md", "issues.md")
+        for n in names:
+            (self.target() / n).write_text("KEEP")
         r = self.call("Elden")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual((self.target() / "notes.md").read_text(), "KEEP")
-
-    def test_creates_log_and_never_overwrites_it(self):
-        self.call("Elden")
-        log = self.target() / "log.md"
-        self.assertEqual(log.read_text(), "# Elden log\n\nOne entry per step: date, what, why, model.\n\n")
-        log.write_text("KEEP")
-        self.call("Elden")
-        self.assertEqual(log.read_text(), "KEEP")
+        for n in names:
+            self.assertEqual((self.target() / n).read_text(), "KEEP", n)
 
     def test_copies_template(self):
         r = self.call("G", "memreader-py")

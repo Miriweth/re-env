@@ -9,37 +9,41 @@ game="$1" template="${2:-}" modname="${3:-${2:-}}"
 [[ -z "$modname" || ( "$modname" != */* && "$modname" != .* ) ]] || usage_die "mod name must be a plain folder name, got '$modname'"
 target="$RE_HOME/targets/$game"
 
-mkdir -p "$target"/{ghidra,dumps,mods}
-if [[ ! -f "$target/notes.md" ]]; then
-    cat > "$target/notes.md" <<NOTES
+mkdir -p "$target"/{ghidra,dumps,mods,station}
+if [[ ! -f "$target/MODDING_PLAN.md" ]]; then
+    cat > "$target/MODDING_PLAN.md" <<PLAN
+# $game modding plan
+- Install: <path> (<store> <appid>), version <x>
+- Engine: <engine + version>, code: managed .NET / IL2CPP / native, 64-bit
+- Anti-cheat / online: <none | what + verdict>
+- Saves: <path>   Config: <path>   Logs: <path>
+- Community route: <loader vX.Y (repo)>, install: <steps>, example mod: <link>
+- Chosen route for "<idea>": <route> because <reason>
+- Lab plan: backup <folders> (um backup), lab profile <how>, windowed <how>
+- Unknowns to resolve first: <list>
+PLAN
+fi
+if [[ ! -f "$target/MODLOG.md" ]]; then
+    cat > "$target/MODLOG.md" <<MODLOG
 # $game
 
 Started $(date +%F).
 
-## Binary
+## Facts
 
-Path, version, engine.
+Versions, paths, IDs, offsets (module + RVA or chain). Keep current.
 
-## Findings
+## Journal
 
-Address, RVA, name, how you know.
-
-## Offsets
-
-Pointer chains and patterns that tools and mods rely on.
-
-## Mods
-
-What lives in mods/ and how it is installed.
-NOTES
+One line per step: - YYYY-MM-DD HH:MM what — why — model. Failures with their cause, what was verified and how.
+MODLOG
 fi
-if [[ ! -f "$target/log.md" ]]; then
-    cat > "$target/log.md" <<LOG
-# $game log
+if [[ ! -f "$target/issues.md" ]]; then
+    cat > "$target/issues.md" <<ISSUES
+# $game issues
 
-One entry per step: date, what, why, model.
-
-LOG
+<!-- - [ ] open problem / - [x] solved problem → fix -->
+ISSUES
 fi
 echo "$target"
 

@@ -22,6 +22,8 @@ class SetupDispatch(unittest.TestCase):
         files = [REPO / "setup.sh", *sorted((REPO / "lib").glob("*.sh")), *sorted((REPO / "bin").iterdir())]
         self.assertGreater(len(files), 10)
         for f in files:
+            if "bash" not in f.open().readline():  # bin/re-dash is Python
+                continue
             r = run(["bash", "-n", f])
             self.assertEqual(r.returncode, 0, f"{f}: {r.stderr}")
 

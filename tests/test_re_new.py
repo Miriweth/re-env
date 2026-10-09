@@ -35,6 +35,14 @@ class ReNew(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual((self.target() / "notes.md").read_text(), "KEEP")
 
+    def test_creates_log_and_never_overwrites_it(self):
+        self.call("Elden")
+        log = self.target() / "log.md"
+        self.assertEqual(log.read_text(), "# Elden log\n\nOne entry per step: date, what, why, model.\n\n")
+        log.write_text("KEEP")
+        self.call("Elden")
+        self.assertEqual(log.read_text(), "KEEP")
+
     def test_copies_template(self):
         r = self.call("G", "memreader-py")
         self.assertEqual(r.returncode, 0, r.stderr)

@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""re-dash [--port N] — read-only dashboard of ~/re on 127.0.0.1: notes, log tails, mods, ollama ps, VRAM, last re-check."""
+import argparse
+import base64
+import hashlib
+import json
+import os
+import re
+import stat
+import subprocess
+import threading
+import time
+import traceback
+import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+RE_HOME = Path(os.environ.get("RE_HOME") or Path.home() / "re")
+LOG_LINES = 20
+NOTES_CAP = 64 * 1024
+LOG_TAIL_BYTES = 16 * 1024
+STATE_TTL = 1.5
+
+
+def sh(*argv):
+    """stdout of a command, or None on any failure."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=2, stdin=subprocess.DEVNULL)
+        return r.stdout if r.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def read(path, cap, tail=False):
+    """At most cap bytes of a regular file (never a symlink, FIFO or device), or "" otherwise.
+    Head mode marks a cut with a truncated line; tail mode reads the last cap bytes, minus the partial first line."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+    except OSError:
+        return ""
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return ""
+        size = st.st_size
+        start = max(0, size - cap) if tail else 0
+        os.lseek(fd, start, os.SEEK_SET)
+        with os.fdopen(os.dup(fd), "rb") as f:
+            data = f.read(cap + 1)
+    except OSError:
+        return ""
+    finally:
+        os.close(fd)
+    if tail:
+        return (data.split(b"\n", 1)[-1] if start else data).decode(errors="replace")
+    return data[:cap].decode(errors="replace") + ("\n… truncated" if len(data) > cap else "")
+
+
+def mtime(path):
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0
+
+
+def is_real_dir(p):
+    return p.is_dir() and not p.is_symlink()
+
+
+def target(d):
+    mods = d / "mods"
+    names = sorted(m.name for m in mods.iterdir() if is_real_dir(m) and not m.name.startswith(".")) if is_real_dir(mods) else []
+    return {
+        "name": d.name,
+        "notes": read(d / "notes.md", NOTES_CAP),
+        "log": "\n".join(read(d / "log.md", LOG_TAIL_BYTES, tail=True).splitlines()[-LOG_LINES:]),
+        "mods": names,
+        "_t": max(mtime(d / "notes.md"), mtime(d / "log.md"), mtime(d)),
+    }
+
+
+def vram():
+    out = sh("nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits")
+    try:
+        used, total = (int(x) for x in out.splitlines()[0].split(","))
+        return {"used": used, "total": total}
+    except (AttributeError, IndexError, ValueError):
+        return None
+
+
+def state():
+    try:
+        dirs = [d for d in (RE_HOME / "targets").iterdir() if is_real_dir(d)]
+    except OSError:
+        dirs = []
+    targets = sorted((target(d) for d in dirs), key=lambda t: -t["_t"])
+    for t in targets:
+        del t["_t"]
+    last = RE_HOME / "re-check.last"
+    return {
+        "targets": targets,
+        "ollama": sh("ollama", "ps") or "ollama unavailable",
+        "vram": vram(),
+        "recheck": {"text": read(last, NOTES_CAP), "mtime": int(mtime(last))} if last.is_file() else None,
+    }
+
+
+_cache = (0.0, None)
+_cache_lock = threading.Lock()
+
+
+def cached_state():
+    """One scan shared by all clients per STATE_TTL (the lock makes concurrent requests wait for it)."""
+    global _cache
+    with _cache_lock:
+        t, st = _cache
+        if st is None or time.monotonic() - t > STATE_TTL:
+            st = json.dumps(state()).encode()
+            _cache = (time.monotonic(), st)
+        return st
+
+
+class Handler(BaseHTTPRequestHandler):
+    timeout = 10  # drop idle or slow clients
+
+    def do_GET(self):
+        try:
+            port = self.server.server_address[1]
+            if (self.headers.get("Host") or "").lower() not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+                self.send_error(403)  # DNS rebinding
+                return
+            path = urllib.parse.urlsplit(self.path).path
+            if path == "/":
+                self.send("text/html; charset=utf-8", PAGE.encode())
+            elif path == "/api/state":
+                self.send("application/json", cached_state())
+            else:
+                self.send_error(404)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        except Exception:  # never let a request kill the server
+            traceback.print_exc()
+            self.send_error(500)
+
+    def send(self, ctype, body):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def end_headers(self):  # every response, errors included
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", CSP)
+        super().end_headers()
+
+    def log_message(self, *args):
+        pass
+
+
+PAGE = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>re-dash</title>
+<style>
+:root{
+  color-scheme:dark;
+  --page:#0d0d0d; --surface:#1a1a19; --border:rgba(255,255,255,.10);
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781; --grid:#2c2c2a;
+  --gpu:#3987e5; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink)}
+body{font:16px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%;padding:10px 16px 16px}
+header{display:flex;align-items:baseline;gap:10px;padding:2px 2px 12px}
+header .brand{font-weight:600}
+header .conn{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+header .conn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+body.online header .conn::before{background:var(--good)}
+body.offline header .conn::before{background:var(--crit)}
+main{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));transition:opacity .3s}
+body.offline main{opacity:.55}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px 12px;min-width:0}
+.tile.hero{grid-column:1/-1}
+.label{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
+.label .sub{color:var(--muted);text-align:right}
+.value{font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.1;margin-top:4px}
+.meter{--c:var(--gpu);height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin:10px 0 4px;overflow:hidden}
+.meter .fill{height:100%;border-radius:3px;background:var(--c);width:0;transition:width .4s}
+.meter.warn .fill{background:var(--warn)}
+.meter.crit .fill{background:var(--crit)}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--grid);font-size:15px}
+.kv .k{color:var(--muted)}
+.kv .v{font-variant-numeric:tabular-nums;text-align:right}
+pre{margin:8px 0 0;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:16em;overflow:auto}
+pre .warn{color:var(--warn)}
+pre .crit{color:var(--crit)}
+summary{font-size:13px;color:var(--ink-2);cursor:pointer;margin-top:10px}
+</style></head><body class="offline">
+<header><span class="brand">re-dash</span><span class="conn">live</span></header>
+<main>
+<section class="tile hero" id="vram">
+  <div class="label"><span>VRAM</span><span class="sub"></span></div>
+  <div class="value">-</div>
+  <div class="meter"><div class="fill"></div></div>
+</section>
+<section class="tile"><div class="label"><span>ollama ps</span></div><pre id="ollama" data-key="ollama"></pre></section>
+<section class="tile"><div class="label"><span>last re-check</span><span class="sub" id="age"></span></div><pre id="recheck" data-key="recheck"></pre></section>
+<div id="targets" style="display:contents"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const GIB = 1024;
+
+function ago(mtime) {
+  const s = Math.max(0, Date.now() / 1000 - mtime);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  return Math.floor(s / 86400) + " d ago";
+}
+
+function renderVram(v) {
+  const t = $("vram"), meter = t.querySelector(".meter");
+  const pct = v ? v.used / v.total * 100 : 0;
+  t.querySelector(".value").textContent = v ? (v.used / GIB).toFixed(1) + " / " + (v.total / GIB).toFixed(1) + " GiB" : "n/a";
+  t.querySelector(".sub").textContent = v ? Math.round(pct) + " %" : "nvidia-smi unavailable";
+  meter.className = "meter" + (pct > 95 ? " crit" : pct > 80 ? " warn" : "");
+  meter.firstChild.style.width = pct + "%";
+}
+
+function renderRecheck(rc) {
+  const pre = $("recheck");
+  pre.textContent = "";
+  $("age").textContent = rc ? ago(rc.mtime) : "";
+  if (!rc) { pre.textContent = "no re-check run yet"; return; }
+  for (const line of rc.text.split("\n")) {
+    const cls = line.startsWith("FAIL") ? "crit" : line.startsWith("WARN") ? "warn" : "";
+    pre.appendChild(el("div", cls, line));
+  }
+}
+
+function renderTarget(t) {
+  const tile = el("section", "tile");
+  const label = el("div", "label");
+  label.append(el("span", "", t.name), el("span", "sub", t.mods.length + " mods"));
+  tile.append(label);
+  for (const m of t.mods) {
+    const kv = el("div", "kv");
+    kv.append(el("span", "k", "mod"), el("span", "v", m));
+    tile.append(kv);
+  }
+  const log = el("pre", "", t.log || "no log yet");
+  log.dataset.key = t.name + ":log";
+  tile.append(log);
+  const d = el("details");
+  d.dataset.name = t.name;
+  const notes = el("pre", "", t.notes || "no notes yet");
+  notes.dataset.key = t.name + ":notes";
+  d.append(el("summary", "", "notes"), notes);
+  tile.append(d);
+  return tile;
+}
+
+function renderTargets(targets) {
+  const box = $("targets");
+  const open = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.name));
+  const tiles = targets.map(renderTarget);
+  tiles.forEach((tile, i) => { if (open.has(targets[i].name)) tile.querySelector("details").open = true; });
+  box.replaceChildren(...tiles);
+}
+
+let lastText = "", lastRecheck = null;
+
+function render(s) {
+  const scroll = new Map([...document.querySelectorAll("pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
+  renderVram(s.vram);
+  $("ollama").textContent = s.ollama;
+  renderRecheck(s.recheck);
+  renderTargets(s.targets);
+  document.querySelectorAll("pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const text = await r.text();
+    if (text !== lastText) {
+      const s = JSON.parse(text);
+      render(s);
+      lastText = text;
+      lastRecheck = s.recheck;
+    } else if (lastRecheck) {
+      $("age").textContent = ago(lastRecheck.mtime);
+    }
+    document.body.className = "online";
+  } catch (e) {
+    document.body.className = "offline";
+  }
+}
+tick();
+setInterval(tick, 2000);
+</script></body></html>
+"""
+
+SCRIPT = re.search(r"<script>(.*?)</script>", PAGE, re.S).group(1)
+CSP = ("default-src 'none'; style-src 'unsafe-inline'; "
+       f"script-src 'sha256-{base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()}'; "
+       "connect-src 'self'; frame-ancestors 'none'")
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Read-only dashboard of ~/re on 127.0.0.1.")
+    ap.add_argument("--port", type=int, default=8780, help="port to listen on, 0 picks a free one (default 8780)")
+    args = ap.parse_args()
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as e:
+        raise SystemExit(f"error: {e}")
+    print(f"re-dash on http://127.0.0.1:{srv.server_address[1]}", flush=True)
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

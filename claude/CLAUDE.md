@@ -18,9 +18,13 @@ plugins) and Linux side tools that read game memory. Nothing else.
 `targets/<game>/` holds one game, created with `re-new <game>`:
 
 - `notes.md` collects everything learned: offsets, structs, function names, open questions.
+- `log.md` gets one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, deepseek, llama).
 - `ghidra/` is the Ghidra project, `dumps/` holds metadata and memory dumps, `mods/` the mods.
 
 `tools/` has x64dbg, Il2CppDumper, BepInEx and the GhydraMCP bridge.
+
+`re-dash` serves a read-only view at 127.0.0.1:8780: notes, log tails, mods,
+`ollama ps`, VRAM and the last `re-check`.
 
 Start Claude Code from `~/re`. `.mcp.json` lives there; from a subfolder the
 Ghidra connection is missing.
@@ -93,7 +97,7 @@ the two things below. Order of work:
    following that repo's `AGENTS.md` and `docs/plugin-spec.md`. The spec allows
    senders that read game memory, so a finished feed can move to
    `~/Projects/sidehud/games/<game>/` with its own README, like `games/stardew/`.
-8. Write `notes.md` as you go, not at the end: what, where (module + RVA or
+8. Append a line to `log.md` after every step. Write `notes.md` as you go, not at the end: what, where (module + RVA or
    chain), how you know. Finish with what works, what is still guessed, and the
    exact commands to run it.
 

@@ -5,7 +5,7 @@ set -uo pipefail
 source "$(dirname "$(realpath "$0")")/../lib/common.sh"
 
 CHECKS=(gpu ollama anthropic ollamaconf claude ghidra mcp dotnet x64dbg memory mingw rust bepinex imhex workspace)
-FULL=0 GAMEDIR="" ONLY=""
+FULL=0 GAMEDIR="" ONLY="" ARGS="$*"
 
 usage() {
     cat <<USAGE
@@ -167,7 +167,10 @@ run_check() {
     local name="$1" msg rc status
     msg="$("check_$name")"; rc=$?
     case $rc in 0) status=PASS ;; 1) status=WARN ;; *) status=FAIL; fails=$((fails + 1)) ;; esac
-    printf '%-4s %-12s %s\n' "$status" "$name" "${msg:-no output}"
+    local line; line="$(printf '%-4s %-12s %s' "$status" "$name" "${msg:-no output}")"
+    echo "$line"
+    [[ -n "$LAST" ]] && { echo "$line" >> "$LAST"; } 2>/dev/null
+    return 0
 }
 
 if [[ -n "$ONLY" ]]; then
@@ -179,5 +182,22 @@ else
     selected=("${CHECKS[@]}")
 fi
 
+# re-dash shows the last run; built in a temp file and moved into place at the end, so a running
+# or killed run never leaves a partial file and a symlink at re-check.last is replaced, not followed.
+# Skipped when the workspace does not exist.
+LAST=""
+if [[ -d "$RE_HOME" ]]; then
+    LAST="$(mktemp "$RE_HOME/.re-check.XXXXXX" 2>/dev/null)" || LAST=""
+    if [[ -n "$LAST" ]]; then
+        trap 'rm -f "$LAST"' EXIT
+        trap 'exit 1' INT TERM HUP
+        { echo "# re-check $ARGS at $(date -Is)" > "$LAST"; } 2>/dev/null || { rm -f "$LAST"; LAST=""; }
+    fi
+fi
+
 for name in "${selected[@]}"; do run_check "$name"; done
+if [[ -n "$LAST" ]]; then
+    chmod 644 "$LAST" 2>/dev/null
+    { mv -fT "$LAST" "$RE_HOME/re-check.last"; } 2>/dev/null && LAST=""
+fi
 ((fails == 0))

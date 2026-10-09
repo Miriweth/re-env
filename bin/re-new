@@ -33,6 +33,14 @@ Pointer chains and patterns that tools and mods rely on.
 What lives in mods/ and how it is installed.
 NOTES
 fi
+if [[ ! -f "$target/log.md" ]]; then
+    cat > "$target/log.md" <<LOG
+# $game log
+
+One entry per step: date, what, why, model.
+
+LOG
+fi
 echo "$target"
 
 [[ -n "$template" ]] || exit 0

@@ -32,6 +32,38 @@ class ReCheck(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertTrue(r.stdout.startswith("PASS"), r.stdout)
 
+    def test_writes_last_file(self):
+        r = self.call("--only", "workspace")
+        last = (self.re_home / "re-check.last").read_text().splitlines()
+        self.assertRegex(last[0], r"^# re-check --only workspace at \d{4}-\d\d-\d\dT")
+        self.assertEqual(last[1:], r.stdout.splitlines())
+
+    def test_last_file_is_truncated_each_run(self):
+        self.call("--only", "workspace,x64dbg")
+        self.call("--only", "workspace")
+        self.assertEqual(len((self.re_home / "re-check.last").read_text().splitlines()), 2)
+
+    def test_symlinked_last_is_replaced_not_followed(self):
+        other = Path(self.tmp.name) / "other"
+        other.write_text("keep me\n")
+        last = self.re_home / "re-check.last"
+        last.symlink_to(other)
+        self.call("--only", "workspace")
+        self.assertEqual(other.read_text(), "keep me\n")
+        self.assertTrue(last.is_file() and not last.is_symlink())
+        self.assertTrue(last.read_text().startswith("# re-check"))
+
+    def test_no_temp_files_left(self):
+        self.call("--only", "workspace")
+        self.assertEqual(sorted(p.name for p in self.re_home.iterdir()), ["re-check.last"])
+
+    def test_missing_re_home_is_no_error(self):
+        self.re_home.rmdir()
+        r = self.call("--only", "workspace")
+        self.assertEqual(r.returncode, 1)
+        self.assertNotIn("No such file", r.stderr)
+        self.assertFalse(self.re_home.exists())
+
     def test_unknown_only(self):
         r = self.call("--only", "nope")
         self.assertEqual(r.returncode, 2)

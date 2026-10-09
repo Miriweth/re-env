@@ -41,6 +41,7 @@ Commands, linked into `~/.local/bin`:
 
 - `re-new <game> [template [name]]` creates `~/re/targets/<game>/` and copies a mod template into it.
 - `re-check [--full]` checks the whole chain and names the setup step for anything that fails.
+- `re-dash [--port N]` serves a read-only dashboard on `127.0.0.1:8780` with notes, log tails, mods, `ollama ps`, VRAM and the last `re-check`.
 - `claude-local [model]` runs Claude Code against Ollama instead of the Anthropic API.
 - `ask-local [model] "prompt" < file` sends text to a local model, for bulk work.
 - `llm-off` unloads all models from VRAM, for before you start a game.

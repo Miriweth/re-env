@@ -1,9 +1,9 @@
 # Anti-cheat
 
-Only games you own, only single player or offline modes. A debugger, an
-injected DLL or a memory reader in a game that runs anti-cheat can get the
-account banned, offline mode included. Anti-cheat reports what it sees, and a
-ban hits the whole account. Nothing checks this automatically; folder markers are unreliable and often
+Only games you own. Single player, co-op and own servers only; no online
+competitive advantage. A debugger, an injected DLL or a memory reader in a
+game that runs anti-cheat can get the account banned, offline mode included.
+Anti-cheat reports what it sees, and a ban hits the whole account. Nothing checks this automatically; folder markers are unreliable and often
 wrong. The call is yours, this page is what to look at before making it.
 
 ## How to tell

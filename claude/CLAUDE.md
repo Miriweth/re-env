@@ -20,7 +20,8 @@ plugins) and Linux side tools that read game memory. Nothing else.
 - `MODDING_PLAN.md` is the recon result: install, engine, anti-cheat facts, saves, plan.
 - `MODLOG.md` has `## Facts` (versions, paths, IDs, offsets as module+RVA or pointer chain, kept current) and `## Journal`, one line per step: `- YYYY-MM-DD HH:MM what — why — model` (model = who did it: Claude, qwen, qwen3, llama). Log failures with cause and how you verified.
 - `issues.md` lists problems: `- [ ] problem` while open, `- [x] problem → fix` when solved.
-- `station/` holds the re-dash thread and session; leave it alone.
+- `station/` holds the re-dash thread and session; leave it alone, except
+  `station/scan.json`, which Recon writes (`um scan --json <game>`).
 - `ghidra/` is the Ghidra project, `dumps/` holds decompiles and memory dumps, `mods/` the mods.
 
 `tools/` has x64dbg, Il2CppDumper, BepInEx and the GhydraMCP bridge.
@@ -176,8 +177,8 @@ Run `llm-off` before starting a game. The game and the model share the VRAM.
 
 ## Rules
 
-Only games you own, only single player or offline. Games with anti-cheat can
-ban the account for a debugger, an injected DLL or a memory reader; what that
-looks like is in `~/Projects/re-env/docs/anti-cheat.md`, the decision is the
+Only games you own. Single player, co-op and own servers only; no online
+competitive advantage. Games with anti-cheat can ban the account for a
+debugger, an injected DLL or a memory reader; what that looks like is in `~/Projects/re-env/docs/anti-cheat.md`, the decision is the
 user's and nothing checks it automatically. No network protocol work for online
 advantages.

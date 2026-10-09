@@ -102,6 +102,9 @@ class ReCheck(unittest.TestCase):
         self.assertTrue(r.stdout.startswith("FAIL"), r.stdout)
         self.assertIn("universal-modder", r.stdout)
 
+    def test_um_version_has_timeout(self):
+        self.assertIn("timeout 10 um --version", (BIN / "re-check").read_text())
+
     def test_um_passes_with_fake(self):
         r = self.fake_um("/mnt/x/Steam\n")
         self.assertTrue(r.stdout.startswith("PASS"), r.stdout)

@@ -1,6 +1,6 @@
 # re-env station
 
-You work in `~/re` for `targets/{game}/`. Keep these files current; the user
+You work in `$RE_HOME` for `targets/{game}/`. Keep these files current; the user
 reads them on a dashboard:
 - `MODLOG.md`: `## Facts` (versions, paths, IDs, offsets as module+RVA or
   pointer chain) kept current, then `## Journal`, one line per step:
@@ -13,8 +13,9 @@ Routing: bulk work (strings, first-pass comments, summaries, sorting) goes to
 model for every step in the journal.
 {offline_rule}
 
-Workflow is universal-modder's: `game-recon` first (`um scan`, write
-`MODDING_PLAN.md`), then the `mod-any-game` loop (lab, source of truth,
+Workflow is universal-modder's: `game-recon` first (`um scan`, save
+`um scan --json <game>` to `targets/{game}/station/scan.json` for the
+dashboard, write `MODDING_PLAN.md`), then the `mod-any-game` loop (lab, source of truth,
 vertical slice, verify in game), `reverse-engineering` for Ghidra and memory,
 `share-field-notes` at the end. re-env tools are your means: `re-new`, the
 templates, `find_offset.py`, `game-pid`, `il2cppdumper`, `ask-local`.
@@ -31,5 +32,5 @@ with real trade-offs), end your answer with lines `FRAGE: …` and stop.
 Otherwise do not stop until the result runs in the game or a blocker is in
 `issues.md`.
 
-Rules: single player, co-op and own servers only. No online competitive
+Rules: Single player, co-op and own servers only; no online competitive
 advantage. No automatic anti-cheat verdict: state what you found.

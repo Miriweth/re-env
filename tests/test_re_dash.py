@@ -4,6 +4,7 @@ import http.client
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -53,8 +54,10 @@ class ReDash(unittest.TestCase):
         self.runtime.mkdir(exist_ok=True)
         env = dict(os.environ, RE_HOME=str(self.re_home), PATH=f"{self.fake_bin}:{os.environ['PATH']}",
                    XDG_RUNTIME_DIR=str(self.runtime))
+        self.env = env
         p = subprocess.Popen([str(BIN / "re-dash"), "--port", "0", *args], env=env,
                              stdout=subprocess.PIPE, text=True)
+        self.proc = p
         self.addCleanup(p.stdout.close)
         self.addCleanup(p.wait)
         self.addCleanup(p.terminate)
@@ -126,6 +129,17 @@ class ReDash(unittest.TestCase):
         self.assertEqual(v1.split(":")[0], "1")
         self.assertEqual(v2.split(":")[0], "2")
         self.assertNotEqual(v1, v2)
+
+    def test_version_changes_when_thread_size_changes(self):
+        st = self.re_home / "targets/Elden/station"
+        st.mkdir()
+        (st / "thread.jsonl").write_text('{"n": 1}\n')
+        os.utime(st / "thread.jsonl", (1000, 1000))
+        url = self.start()
+        v1 = self.state(url)["game"]["version"]
+        (st / "thread.jsonl").write_text('{"n": 12345}\n')
+        os.utime(st / "thread.jsonl", (1000, 1000))
+        self.assertNotEqual(v1, self.state(url)["game"]["version"])
 
     def test_settings_default_on_corrupt_file(self):
         (self.re_home / "station.json").write_text("{")
@@ -387,6 +401,7 @@ class ReDash(unittest.TestCase):
         url = self.start()
         self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 202)
         self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 409)
+        self.assertEqual(self.post(url, "/api/reset", {"game": "Elden"})[0], 409)
         self.assertEqual(self.post(url, "/api/cancel", {"game": "Elden"}), (200, {"ok": True}))
         self.until(lambda: self.state(url)["status"] == "idle")
         self.assertEqual(self.post(url, "/api/cancel", {"game": "Elden"}), (200, {"ok": False}))
@@ -401,8 +416,38 @@ class ReDash(unittest.TestCase):
         url = self.start()
         self.assertEqual(self.state(url)["status"], "idle")
         self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 202)
-        self.assertEqual(self.state(url)["status"], "running")
+        s = self.state(url)
+        self.assertEqual(s["status"], "running")
+        self.assertEqual((s["run"]["status"], s["run"]["backend"]), ("running", "claude"))
+        self.assertIn("tool", s["run"])
         self.assertEqual(self.state(url, "nope")["status"], "idle")
+        self.assertEqual(self.state(url, "nope")["run"]["status"], "idle")
+
+    def test_sighup_kills_children(self):
+        pidfile = Path(self.tmp.name) / "fake.pid"
+        self.fake_claude(pre=f'echo $$ > "{pidfile}"\nsleep 30 & wait')
+        url = self.start()
+        self.assertEqual(self.post(url, "/api/run", self.run_body())[0], 202)
+        self.until(lambda: pidfile.exists() and pidfile.read_text().strip())
+        sid = pidfile.read_text().strip()
+        self.proc.send_signal(signal.SIGHUP)
+        self.assertEqual(self.proc.wait(6), 0)
+        self.until(lambda: subprocess.run(["pgrep", "-s", sid], capture_output=True).returncode != 0, 6)
+
+    def test_failed_bind_keeps_running_token(self):
+        url = self.start()
+        token_file = self.runtime / "re-dash.token"
+        before = token_file.read_text()
+        r = subprocess.run([str(BIN / "re-dash"), "--port", url.rsplit(":", 1)[1]], env=self.env,
+                           capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(token_file.read_text(), before)
+
+    def test_page_shows_tool_refills_backend_and_times_out(self):
+        page = self.get(self.start(), "/").body.decode()
+        self.assertIn("s.run.tool", page)
+        self.assertIn('fillSelect($("backend"), last.system.backends, saved.default_backend)', page)
+        self.assertEqual(page.count("fetch("), page.count("AbortSignal.timeout(8000)"))
 
     def test_post_unknown_route(self):
         self.assertEqual(self.post(self.start(), "/api/nope", {})[0], 404)
@@ -522,6 +567,12 @@ class StateUnit(unittest.TestCase):
         with self.assertRaises(ValueError) as c:
             state.save_settings({"<evil>": 1})
         self.assertEqual(str(c.exception), "unknown setting")
+
+    def test_save_settings_failed_replace_leaves_no_temp(self):
+        with mock.patch("os.replace", side_effect=OSError("boom")):
+            with self.assertRaises(OSError):
+                state.save_settings({"offline": True})
+        self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
 
     def test_make_token_unwritable_exits(self):
         from station import server

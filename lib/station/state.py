@@ -4,6 +4,7 @@ import os
 import re
 import stat
 import subprocess
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -71,6 +72,13 @@ def mtime(path):
         return 0
 
 
+def size(path):
+    try:
+        return os.stat(path).st_size
+    except OSError:
+        return 0
+
+
 def is_real_dir(p):
     return p.is_dir() and not p.is_symlink()
 
@@ -95,9 +103,14 @@ def save_settings(d):
         raise ValueError("offline must be a boolean")
     if merged["default_backend"] not in BACKENDS:
         raise ValueError("default_backend must be one of " + ", ".join(BACKENDS))
-    tmp = RE_HOME / f".station.json.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps(merged))
-    os.replace(tmp, RE_HOME / "station.json")
+    fd, tmp = tempfile.mkstemp(dir=RE_HOME, prefix=".station.json.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(merged))
+        os.replace(tmp, RE_HOME / "station.json")
+    except OSError:
+        os.unlink(tmp)
+        raise
     return merged
 
 
@@ -134,8 +147,8 @@ def game_files(name):
         "mods": sorted(x.name for x in mods.iterdir() if is_real_dir(x) and not x.name.startswith(".")) if is_real_dir(mods) else [],
         "scan": scan,
         "thread": thread,
-        # ponytail: line count covers the last THREAD_TAIL_BYTES only; mtime still moves on every append
-        "version": f"{len(thread_lines)}:{int(max(mtime(f) for f in files))}",
+        # ponytail: line count covers the last THREAD_TAIL_BYTES only; size and mtime still move on every append
+        "version": f"{len(thread_lines)}:{size(d / 'station/thread.jsonl')}:{int(max(mtime(f) for f in files))}",
     }
 
 

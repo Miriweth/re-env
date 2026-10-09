@@ -56,10 +56,12 @@ def valid_game(body):
 def api_state(query):
     game = urllib.parse.parse_qs(query).get("game", [""])[0]
     known = game in state.games()
+    run = manager.status(game if known else "")
     return {
         "system": {**state.system_state(), "backends": state.BACKENDS},
         "game": state.game_files(game) if known else None,
-        "status": manager.status(game)["status"] if known else "idle",
+        "status": run["status"],
+        "run": run,
     }
 
 
@@ -81,7 +83,10 @@ def api_run(body):
 
 
 def api_reset(body):
-    manager.reset(valid_game(body))
+    try:
+        manager.reset(valid_game(body))
+    except runs.Busy:
+        raise Reject(409, "a run is already active for this game")
     return 200, {"ok": True}
 
 
@@ -193,9 +198,8 @@ def csp_for(page):
             f"script-src 'sha256-{digest}'; connect-src 'self'; frame-ancestors 'none'")
 
 
-def serve(port, token):
+def serve(port):
     global manager, TOKEN, PAGE, CSP
-    TOKEN = token
     PAGE = Path(__file__).with_name("page.html").read_text(encoding="utf-8")
     CSP = csp_for(PAGE)
     try:
@@ -203,10 +207,12 @@ def serve(port, token):
     except OSError as e:
         raise SystemExit(f"error: {e}")
     srv.daemon_threads = True
+    TOKEN = make_token()  # only after the bind, so a second instance keeps the running one's token
     manager = runs.Manager()
     atexit.register(manager.shutdown)  # children die with the station
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # SystemExit runs atexit
-    print(f"re-dash on http://127.0.0.1:{srv.server_address[1]}/#{token}", flush=True)
+    for sig in (signal.SIGTERM, signal.SIGHUP):  # SystemExit runs atexit; SIGINT is KeyboardInterrupt below
+        signal.signal(sig, lambda *_: sys.exit(0))
+    print(f"re-dash on http://127.0.0.1:{srv.server_address[1]}/#{TOKEN}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

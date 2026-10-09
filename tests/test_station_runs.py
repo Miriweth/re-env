@@ -247,14 +247,24 @@ class StationRuns(unittest.TestCase):
     def test_child_env_minimal(self):
         envfile = Path(self.tmp.name) / "env.out"
         self.fake(pre=f'env > "{envfile}"')
-        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "secret", "LANG": "C.UTF-8"}):
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "secret", "LANG": "C.UTF-8", "RE_HOME": "/x/re", "RE_ENV": "/x/env"}):
             self.run_once()
         env = envfile.read_text()
         self.assertNotIn("ANTHROPIC_API_KEY", env)
         self.assertIn("ECC_GATEGUARD=off", env.splitlines())
         self.assertIn("LANG=C.UTF-8", env.splitlines())
+        self.assertIn(f"RE_HOME={self.re_home}", env.splitlines())
+        self.assertIn("RE_ENV=/x/env", env.splitlines())
         self.assertLessEqual(set(runs.child_env()),
-                             {"PATH", "HOME", "XDG_RUNTIME_DIR", "OLLAMA_URL", "TERM", "LANG", "ECC_GATEGUARD"})
+                             {"PATH", "HOME", "XDG_RUNTIME_DIR", "OLLAMA_URL", "TERM", "LANG", "RE_HOME", "RE_ENV",
+                              "ECC_GATEGUARD"})
+
+    def test_reset_while_running_is_busy(self):
+        self.fake(pre="sleep 30 & wait")
+        self.m.start("Elden", "claude", "x")
+        with self.assertRaises(runs.Busy):
+            self.m.reset("Elden")
+        self.assertEqual(self.thread()[-1]["role"], "user")
 
 
 if __name__ == "__main__":

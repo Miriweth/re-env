@@ -156,7 +156,7 @@ check_imhex() {
 
 check_um() {
     local v libs
-    v="$(um --version 2>/dev/null)" || { echo "um missing (install universal-modder, see README)"; return 2; }
+    v="$(timeout 10 um --version 2>/dev/null)" || { echo "um missing (install universal-modder, see README)"; return 2; }
     libs="$(timeout 20 um scan --list 2>/dev/null | grep -c .)"
     ((libs > 0)) || { echo "$v, but um scan --list finds no Steam library"; return 1; }
     echo "$v, $libs Steam libraries"

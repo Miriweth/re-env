@@ -12,7 +12,7 @@ from station import state
 
 PROMPT = (Path(__file__).parent / "prompt.md").read_text()
 OFFLINE_RULE = "Offline mode is ON: run everything through claude-local or ask-local and say so."
-ENV_VARS = ("PATH", "HOME", "XDG_RUNTIME_DIR", "OLLAMA_URL", "TERM", "LANG")
+ENV_VARS = ("PATH", "HOME", "XDG_RUNTIME_DIR", "OLLAMA_URL", "TERM", "LANG", "RE_HOME", "RE_ENV")
 # ponytail: fixed limit, make it a setting if a recon ever needs longer
 RUN_TIMEOUT = 60 * 60
 KILL_GRACE = 5
@@ -53,7 +53,9 @@ def command(backend, game, session_id, settings):
 
 
 def child_env():
-    return {**{k: os.environ[k] for k in ENV_VARS if k in os.environ}, "ECC_GATEGUARD": "off"}
+    # RE_HOME always set: prompt.md names $RE_HOME, and the station may run on the ~/re default
+    return {**{k: os.environ[k] for k in ENV_VARS if k in os.environ}, "RE_HOME": str(state.RE_HOME),
+            "ECC_GATEGUARD": "off"}
 
 
 def station_dir(game):
@@ -247,8 +249,12 @@ class Manager:
         return True
 
     def reset(self, game):
-        save_sessions(game, {})
-        append(game, "system", "station", "new conversation")
+        with self._lock:  # a running child would write its session id back right after
+            run = self.runs.get(game)
+            if run and run.status == "running":
+                raise Busy(game)
+            save_sessions(game, {})
+            append(game, "system", "station", "new conversation")
 
     def status(self, game):
         with self._lock:

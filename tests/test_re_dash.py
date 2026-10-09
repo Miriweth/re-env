@@ -468,6 +468,26 @@ class ReDash(unittest.TestCase):
         r = self.raw_post(url, "/api/settings", b'{"evil reason": 1}')
         self.assertEqual((r.status, r.reason), (400, "Bad Request"))
 
+    def test_state_lists_backends(self):
+        self.assertEqual(self.state(self.start())["system"]["backends"], list(state.BACKENDS))
+
+    def test_page_has_csp_hash_matching_script(self):
+        r = self.get(self.start(), "/")
+        page = r.body.decode()
+        self.assertEqual(page, (Path(__file__).resolve().parent.parent / "lib/station/page.html").read_text())
+        scripts = re.findall(r"<script>(.*?)</script>", page, re.S)
+        self.assertEqual(len(scripts), 1)
+        self.assertEqual(page.count("<script"), 1)
+        h = base64.b64encode(hashlib.sha256(scripts[0].encode()).digest()).decode()
+        self.assertIn(f"script-src 'sha256-{h}'", r.getheader("Content-Security-Policy"))
+        self.assertIsNone(re.search(r"<[^>]*\s(on\w+|style)\s*=", page, re.I))
+        self.assertNotIn("innerHTML", page)
+
+    def test_page_has_station_controls(self):
+        page = self.get(self.start(), "/").body.decode()
+        for id_ in "thread prompt backend send cancel reset settings recon mod fieldnote".split():
+            self.assertIn(f'id="{id_}"', page, id_)
+
 
 class StateUnit(unittest.TestCase):
     def setUp(self):

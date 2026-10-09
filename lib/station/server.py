@@ -19,6 +19,8 @@ from station import runs, state
 MAX_BODY = 16 * 1024
 manager = None  # set by serve()
 TOKEN = ""
+PAGE = ""  # page.html, read by serve()
+CSP = "default-src 'none'"
 
 
 class Reject(Exception):
@@ -55,7 +57,7 @@ def api_state(query):
     game = urllib.parse.parse_qs(query).get("game", [""])[0]
     known = game in state.games()
     return {
-        "system": state.system_state(),
+        "system": {**state.system_state(), "backends": state.BACKENDS},
         "game": state.game_files(game) if known else None,
         "status": manager.status(game)["status"] if known else "idle",
     }
@@ -183,168 +185,19 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-PAGE = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>re-dash</title>
-<style>
-:root{
-  color-scheme:dark;
-  --page:#0d0d0d; --surface:#1a1a19; --border:rgba(255,255,255,.10);
-  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781; --grid:#2c2c2a;
-  --gpu:#3987e5; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
-}
-*{box-sizing:border-box}
-html,body{margin:0;background:var(--page);color:var(--ink)}
-body{font:16px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%;padding:10px 16px 16px}
-header{display:flex;align-items:baseline;gap:10px;padding:2px 2px 12px}
-header .brand{font-weight:600}
-header .conn{margin-left:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
-header .conn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
-body.online header .conn::before{background:var(--good)}
-body.offline header .conn::before{background:var(--crit)}
-main{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));transition:opacity .3s}
-body.offline main{opacity:.55}
-.tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px 12px;min-width:0}
-.tile.hero{grid-column:1/-1}
-.label{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
-.label .sub{color:var(--muted);text-align:right}
-.value{font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1.1;margin-top:4px}
-.meter{--c:var(--gpu);height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin:10px 0 4px;overflow:hidden}
-.meter .fill{height:100%;border-radius:3px;background:var(--c);width:0;transition:width .4s}
-.meter.warn .fill{background:var(--warn)}
-.meter.crit .fill{background:var(--crit)}
-.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--grid);font-size:15px}
-.kv .k{color:var(--muted)}
-.kv .v{font-variant-numeric:tabular-nums;text-align:right}
-pre{margin:8px 0 0;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:16em;overflow:auto}
-pre .warn{color:var(--warn)}
-pre .crit{color:var(--crit)}
-summary{font-size:13px;color:var(--ink-2);cursor:pointer;margin-top:10px}
-</style></head><body class="offline">
-<header><span class="brand">re-dash</span><span class="conn">live</span></header>
-<main>
-<section class="tile hero" id="vram">
-  <div class="label"><span>VRAM</span><span class="sub"></span></div>
-  <div class="value">-</div>
-  <div class="meter"><div class="fill"></div></div>
-</section>
-<section class="tile"><div class="label"><span>ollama ps</span></div><pre id="ollama" data-key="ollama"></pre></section>
-<section class="tile"><div class="label"><span>last re-check</span><span class="sub" id="age"></span></div><pre id="recheck" data-key="recheck"></pre></section>
-<div id="targets" style="display:contents"></div>
-</main>
-<script>
-const $ = id => document.getElementById(id);
-const el = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
-const GIB = 1024;
-
-function ago(mtime) {
-  const s = Math.max(0, Date.now() / 1000 - mtime);
-  if (s < 60) return "just now";
-  if (s < 3600) return Math.floor(s / 60) + " min ago";
-  if (s < 86400) return Math.floor(s / 3600) + " h ago";
-  return Math.floor(s / 86400) + " d ago";
-}
-
-function renderVram(v) {
-  const t = $("vram"), meter = t.querySelector(".meter");
-  const pct = v ? v.used / v.total * 100 : 0;
-  t.querySelector(".value").textContent = v ? (v.used / GIB).toFixed(1) + " / " + (v.total / GIB).toFixed(1) + " GiB" : "n/a";
-  t.querySelector(".sub").textContent = v ? Math.round(pct) + " %" : "nvidia-smi unavailable";
-  meter.className = "meter" + (pct > 95 ? " crit" : pct > 80 ? " warn" : "");
-  meter.firstChild.style.width = pct + "%";
-}
-
-function renderRecheck(rc) {
-  const pre = $("recheck");
-  pre.textContent = "";
-  $("age").textContent = rc ? ago(rc.mtime) : "";
-  if (!rc) { pre.textContent = "no re-check run yet"; return; }
-  for (const line of rc.text.split("\n")) {
-    const cls = line.startsWith("FAIL") ? "crit" : line.startsWith("WARN") ? "warn" : "";
-    pre.appendChild(el("div", cls, line));
-  }
-}
-
-function renderTarget(t, name) {
-  const tile = el("section", "tile");
-  const label = el("div", "label");
-  label.append(el("span", "", name), el("span", "sub", t.mods.length + " mods"));
-  tile.append(label);
-  for (const m of t.mods) {
-    const kv = el("div", "kv");
-    kv.append(el("span", "k", "mod"), el("span", "v", m));
-    tile.append(kv);
-  }
-  const log = el("pre", "", t.modlog_tail || "no modlog yet");
-  log.dataset.key = t.name + ":modlog";
-  tile.append(log);
-  const d = el("details");
-  d.dataset.name = name;
-  const notes = el("pre", "", (t.plan || t.modlog_facts) || "no plan yet");
-  notes.dataset.key = t.name + ":plan";
-  d.append(el("summary", "", "plan"), notes);
-  tile.append(d);
-  return tile;
-}
-
-function renderTargets(targets) { // [[name, game], ...]
-  const box = $("targets");
-  const open = new Set([...box.querySelectorAll("details[open]")].map(d => d.dataset.name));
-  const tiles = targets.map(([name, g]) => renderTarget(g, name));
-  tiles.forEach((tile, i) => { if (open.has(targets[i][0])) tile.querySelector("details").open = true; });
-  box.replaceChildren(...tiles);
-}
-
-let lastText = "", lastRecheck = null, game = "";
-
-function render(s) {
-  const scroll = new Map([...document.querySelectorAll("pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
-  renderVram(s.system.vram);
-  $("ollama").textContent = s.system.ollama;
-  renderRecheck(s.system.recheck);
-  renderTargets(s.game ? [[game, s.game]] : []);
-  document.querySelectorAll("pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
-}
-
-async function tick() {
-  try {
-    const r = await fetch("/api/state?game=" + encodeURIComponent(game), {cache: "no-store"});
-    if (!r.ok) throw new Error(r.status);
-    const text = await r.text();
-    if (text !== lastText) {
-      const s = JSON.parse(text);
-      if (!game && s.system.games.length) { game = s.system.games[0]; lastText = ""; return tick(); }
-      render(s);
-      lastText = text;
-      lastRecheck = s.system.recheck;
-    } else if (lastRecheck) {
-      $("age").textContent = ago(lastRecheck.mtime);
-    }
-    document.body.className = "online";
-  } catch (e) {
-    document.body.className = "offline";
-  }
-}
-tick();
-setInterval(tick, 2000);
-</script></body></html>
-"""
-
-SCRIPT = re.search(r"<script>(.*?)</script>", PAGE, re.S).group(1)
-CSP = ("default-src 'none'; style-src 'unsafe-inline'; "
-       f"script-src 'sha256-{base64.b64encode(hashlib.sha256(SCRIPT.encode()).digest()).decode()}'; "
-       "connect-src 'self'; frame-ancestors 'none'")
+def csp_for(page):
+    """CSP that allows exactly the page's one inline script, by hash."""
+    script = re.search(r"<script>(.*?)</script>", page, re.S).group(1)
+    digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    return ("default-src 'none'; style-src 'unsafe-inline'; "
+            f"script-src 'sha256-{digest}'; connect-src 'self'; frame-ancestors 'none'")
 
 
 def serve(port, token):
-    global manager, TOKEN
+    global manager, TOKEN, PAGE, CSP
     TOKEN = token
+    PAGE = Path(__file__).with_name("page.html").read_text()
+    CSP = csp_for(PAGE)
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     except OSError as e:

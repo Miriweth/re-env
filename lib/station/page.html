@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>re-dash</title>
+<style>
+:root{
+  color-scheme:dark;
+  --page:#0d0d0d; --surface:#1a1a19; --border:rgba(255,255,255,.10);
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781; --grid:#2c2c2a;
+  --gpu:#3987e5; --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--page);color:var(--ink)}
+body{font:16px/1.35 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-text-size-adjust:100%;padding:10px 16px 16px}
+button,select,textarea,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--border);border-radius:8px}
+button,select{font-size:14px;padding:4px 10px;max-width:100%}
+button{cursor:pointer}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--gpu);border-color:var(--gpu)}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:2px 2px 16px}
+header .brand{font-weight:600}
+header .sys{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:12px;color:var(--muted);flex:1 1 260px;min-width:0}
+header .sys>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+header .sys .meter{width:80px;margin:0}
+header .conn{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+header .conn::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+body.online header .conn::before{background:var(--good)}
+body.offline header .conn::before{background:var(--crit)}
+.dot{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.dot::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.dot.running::before{background:var(--gpu)}
+.dot.waiting::before{background:var(--warn)}
+.dot.failed::before{background:var(--crit)}
+.notice{flex-basis:100%;font-size:13px;color:var(--warn)}
+main{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);transition:opacity .3s}
+@media (min-width:900px){main{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}}
+body.offline main{opacity:.55}
+.side{display:grid;gap:16px;align-content:start;min-width:0}
+.tile{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px 12px;min-width:0}
+#panel{margin-bottom:16px}
+.label{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
+.label .sub{color:var(--muted);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meter{height:6px;border-radius:3px;background:rgba(255,255,255,.08);margin:10px 0 4px;overflow:hidden}
+.meter .fill{height:100%;border-radius:3px;background:var(--gpu);width:0;transition:width .4s}
+.meter.warn .fill{background:var(--warn)}
+.meter.crit .fill{background:var(--crit)}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--grid);font-size:15px}
+.kv .k{color:var(--muted)}
+.kv .v{font-variant-numeric:tabular-nums;text-align:right;overflow-wrap:anywhere}
+pre{margin:8px 0 0;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:var(--ink-2);white-space:pre-wrap;overflow-wrap:anywhere;max-height:16em;overflow:auto}
+summary{font-size:13px;color:var(--ink-2);cursor:pointer;margin-top:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.thread{max-height:62vh;overflow:auto;margin-top:8px}
+.msg{border-top:1px solid var(--grid);padding:6px 0}
+.msg .who{font-size:11px;color:var(--muted)}
+.msg pre{margin-top:2px;max-height:none;color:var(--ink)}
+.msg.user pre{color:var(--gpu)}
+.msg.error pre{color:var(--crit)}
+.msg.system pre,.msg.tool summary{color:var(--muted)}
+.msg.tool{padding:2px 0}
+.msg.tool summary{margin:0;font:12px/1.4 ui-monospace,Menlo,Consolas,monospace}
+.ask{color:var(--warn);font-weight:600}
+textarea{display:block;width:100%;margin-top:12px;padding:8px;resize:vertical;min-height:4.5em}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+.issue{display:flex;gap:8px;align-items:baseline;padding:4px 0;border-top:1px solid var(--grid);font-size:14px;overflow-wrap:anywhere}
+.issue.done{color:var(--muted)}
+.fail{color:var(--crit);font-size:14px;margin-top:6px}
+.empty{color:var(--muted);font-size:13px;margin-top:6px}
+#panel label{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-top:1px solid var(--grid);font-size:14px}
+</style></head><body class="offline">
+<header>
+  <span class="brand">re-dash</span>
+  <select id="game" aria-label="game"></select>
+  <span id="status" class="dot idle">idle</span>
+  <span class="sys">
+    <span id="vram-text">VRAM n/a</span>
+    <span class="meter" id="vram"><span class="fill"></span></span>
+    <span id="ollama"></span>
+    <span id="age">re-check never</span>
+  </span>
+  <span class="conn">live</span>
+  <button id="settings" type="button" aria-expanded="false">settings</button>
+  <div id="notice" class="notice" hidden></div>
+</header>
+<section class="tile" id="panel" hidden>
+  <div class="label"><span>settings</span></div>
+  <label>bulk model <select id="bulk_model"></select></label>
+  <label>offline <input type="checkbox" id="offline"></label>
+  <label>default backend <select id="default_backend"></select></label>
+  <div class="row"><button id="save" type="button" class="primary">Save</button></div>
+</section>
+<main>
+<section class="tile">
+  <div class="label"><span>thread</span><span class="sub" id="game-name"></span></div>
+  <div id="thread" class="thread"></div>
+  <textarea id="prompt" rows="3" aria-label="prompt" placeholder="Enter sends, Shift+Enter newline"></textarea>
+  <div class="row">
+    <select id="backend" aria-label="backend"></select>
+    <button id="send" type="button" class="primary">Send</button>
+    <button id="cancel" type="button">Cancel</button>
+    <button id="reset" type="button">New</button>
+  </div>
+  <div class="row">
+    <button id="recon" type="button">Recon</button>
+    <button id="mod" type="button">Mod</button>
+    <button id="fieldnote" type="button">Field note</button>
+  </div>
+</section>
+<div class="side">
+  <section class="tile"><div class="label"><span>Problems</span></div><div id="problems"></div></section>
+  <section class="tile"><div class="label"><span>MODLOG</span></div>
+    <details open><summary>facts</summary><pre id="facts" data-key="facts"></pre></details>
+    <pre id="journal" data-key="journal"></pre>
+  </section>
+  <section class="tile"><details><summary>Plan</summary><pre id="plan" data-key="plan"></pre></details></section>
+  <section class="tile"><div class="label"><span>Mods</span></div><div id="mods"></div></section>
+  <section class="tile" id="scan-tile" hidden><div class="label"><span>Scan</span></div><div id="scan"></div></section>
+</div>
+</main>
+<script>
+const TOKEN = location.hash.slice(1);
+history.replaceState(null, "", location.pathname);
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+const GIB = 1024;
+const STALE = "token missing or stale, restart re-dash and open the printed URL";
+const CANNED = {
+  recon: g => `Run game-recon for ${g}: um scan, engine, anti-cheat facts, decompile into dumps/, write MODDING_PLAN.md, open points into issues.md.`,
+  mod: g => `Install a mod for ${g} that `,
+  fieldnote: () => "Turn MODLOG.md into a knowledge-base note with um kb new, then um kb check. Do not open a PR.",
+};
+
+let game = "", lastText = "", threadKey = "", threadLen = 0, status = "idle", last = null;
+try { game = localStorage.getItem("re-dash.game") || ""; } catch (e) {}
+
+function ago(mtime) {
+  const s = Math.max(0, Date.now() / 1000 - mtime);
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago";
+  return Math.floor(s / 86400) + " d ago";
+}
+
+function hhmm(t) {
+  const d = new Date(typeof t === "number" ? t * 1000 : t);
+  return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
+}
+
+function notice(text) {
+  $("notice").textContent = text;
+  $("notice").hidden = !text;
+}
+
+function fillSelect(sel, values, chosen) {
+  if (sel.options.length !== values.length || [...sel.options].some((o, i) => o.value !== values[i])) {
+    sel.replaceChildren(...values.map(v => el("option", "", v)));
+  }
+  if (chosen !== undefined && values.includes(chosen)) sel.value = chosen;
+}
+
+function renderSystem(sys) {
+  const v = sys.vram, meter = $("vram");
+  const pct = v ? v.used / v.total * 100 : 0;
+  $("vram-text").textContent = v ? "VRAM " + (v.used / GIB).toFixed(1) + " / " + (v.total / GIB).toFixed(1) + " GiB" : "VRAM n/a";
+  meter.className = "meter" + (pct > 95 ? " crit" : pct > 80 ? " warn" : "");
+  meter.firstChild.style.width = pct + "%";
+  const lines = String(sys.ollama || "").trim().split("\n");
+  $("ollama").textContent = lines.length > 1 ? lines[1] : lines[0].startsWith("NAME") ? "no model loaded" : lines[0];
+  $("age").textContent = "re-check " + (sys.recheck ? ago(sys.recheck.mtime) : "never");
+  fillSelect($("game"), sys.games, game);
+  if (!$("backend").options.length) fillSelect($("backend"), sys.backends, sys.settings.default_backend);
+}
+
+function renderMsg(m, i) {
+  const role = String(m.role || "system").replace(/[^\w-]/g, "");
+  const text = String(m.text ?? "");
+  if (role === "tool") {
+    const d = el("details", "msg tool");
+    d.append(el("summary", "", text.split("\n")[0]), el("pre", "", text));
+    return d;
+  }
+  const box = el("div", "msg " + role);
+  box.append(el("div", "who", [m.model || role, hhmm(m.t)].filter(Boolean).join(" · ")));
+  const pre = el("pre");
+  pre.dataset.key = i + ":" + m.t;
+  const lines = text.split("\n");
+  lines.forEach((line, j) => {
+    if (/^(FRAGE|QUESTION):/.test(line)) pre.append(el("div", "ask", line));
+    else pre.append(line + (j < lines.length - 1 ? "\n" : ""));
+  });
+  box.append(pre);
+  return box;
+}
+
+function renderThread(entries) {
+  const box = $("thread");
+  const scroll = new Map([...box.querySelectorAll("pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
+  const top = box.scrollTop;
+  box.replaceChildren(...entries.map(renderMsg));
+  box.querySelectorAll("pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
+  box.scrollTop = entries.length > threadLen ? box.scrollHeight : top;
+  threadLen = entries.length;
+}
+
+function fmt(v) {
+  return Array.isArray(v) ? v.join(", ") : v && typeof v === "object" ? JSON.stringify(v) : String(v);
+}
+
+function renderFiles(g) {
+  const probs = [];
+  if (status === "failed") probs.push(el("div", "fail", "last run failed, see thread"));
+  const issues = [...g.issues].sort((a, b) => a.done - b.done);
+  for (const it of issues) {
+    const row = el("label", "issue" + (it.done ? " done" : ""));
+    const box = el("input");
+    box.type = "checkbox";
+    box.checked = it.done;
+    box.disabled = true;
+    row.append(box, el("span", "", it.text));
+    probs.push(row);
+  }
+  if (!probs.length) probs.push(el("div", "empty", "no open points"));
+  $("problems").replaceChildren(...probs);
+  $("facts").textContent = g.modlog_facts || "no MODLOG.md yet";
+  $("journal").textContent = g.modlog_tail;
+  $("journal").hidden = !g.modlog_tail;
+  $("plan").textContent = g.plan || "no MODDING_PLAN.md yet";
+  $("mods").replaceChildren(...(g.mods.length ? g.mods.map(m => el("div", "kv", m)) : [el("div", "empty", "no mods")]));
+  const scan = g.scan && typeof g.scan === "object" ? g.scan : null;
+  const rows = scan ? ["engine", "anticheat", "loaders"].filter(k => k in scan) : [];
+  $("scan-tile").hidden = !rows.length;
+  $("scan").replaceChildren(...rows.map(k => {
+    const kv = el("div", "kv");
+    kv.append(el("span", "k", k), el("span", "v", fmt(scan[k])));
+    return kv;
+  }));
+}
+
+function render(s) {
+  last = s;
+  status = s.status;
+  $("status").className = "dot " + status;
+  $("status").textContent = status;
+  $("send").disabled = status === "running";
+  $("game-name").textContent = game;
+  renderSystem(s.system);
+  const scroll = new Map([...document.querySelectorAll(".side pre[data-key]")].map(p => [p.dataset.key, p.scrollTop]));
+  if (s.game) renderFiles(s.game);
+  document.querySelectorAll(".side pre[data-key]").forEach(p => { p.scrollTop = scroll.get(p.dataset.key) || 0; });
+  const key = game + "|" + (s.game ? s.game.version : "") + "|" + status;
+  if (key !== threadKey) {
+    renderThread(s.game ? s.game.thread : []);
+    threadKey = key;
+  }
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state?game=" + encodeURIComponent(game), {cache: "no-store"});
+    if (!r.ok) throw new Error(r.status);
+    const text = await r.text();
+    if (text !== lastText) {
+      const s = JSON.parse(text);
+      if (!s.system.games.includes(game) && s.system.games.length) { selectGame(s.system.games[0]); return; }
+      render(s);
+      lastText = text;
+    } else if (last && last.system.recheck) {
+      $("age").textContent = "re-check " + ago(last.system.recheck.mtime);
+    }
+    document.body.className = "online";
+  } catch (e) {
+    document.body.className = "offline";
+  }
+}
+
+function selectGame(g) {
+  game = g;
+  try { localStorage.setItem("re-dash.game", g); } catch (e) {}
+  lastText = threadKey = "";
+  threadLen = 0;
+  tick();
+}
+
+async function post(path, body) {
+  let r;
+  try {
+    r = await fetch(path, {method: "POST", body: JSON.stringify(body),
+      headers: {"Authorization": "Bearer " + TOKEN, "Content-Type": "application/json"}});
+  } catch (e) {
+    notice("station unreachable");
+    return null;
+  }
+  if (r.status === 403) notice(STALE);
+  else if (r.status === 409) notice("a run is already active for this game");
+  else if (!r.ok) notice(path + " failed: HTTP " + r.status);
+  else notice("");
+  lastText = "";
+  tick();
+  return r.ok ? r : null;
+}
+
+async function send() {
+  const prompt = $("prompt").value.trim();
+  if (!prompt || !game || $("send").disabled) return;
+  $("send").disabled = true;
+  if (await post("/api/run", {game, backend: $("backend").value, prompt})) $("prompt").value = "";
+  else $("send").disabled = status === "running";
+}
+
+function canned(kind) {
+  const p = $("prompt");
+  p.value = CANNED[kind](game);
+  p.focus();
+  p.setSelectionRange(p.value.length, p.value.length);
+}
+
+function toggleSettings() {
+  const panel = $("panel");
+  panel.hidden = !panel.hidden;
+  $("settings").setAttribute("aria-expanded", String(!panel.hidden));
+  if (panel.hidden || !last) return;
+  const sys = last.system, st = sys.settings;
+  // the ask-local backends name every bulk model alias (qwen, qwen3, llama)
+  const models = sys.backends.filter(b => b.startsWith("ask-local:")).map(b => b.slice(10));
+  fillSelect($("bulk_model"), models, st.bulk_model);
+  fillSelect($("default_backend"), sys.backends, st.default_backend);
+  $("offline").checked = st.offline;
+}
+
+async function saveSettings() {
+  const r = await post("/api/settings", {bulk_model: $("bulk_model").value, offline: $("offline").checked,
+    default_backend: $("default_backend").value});
+  if (r) toggleSettings();
+}
+
+$("game").addEventListener("change", e => selectGame(e.target.value));
+$("send").addEventListener("click", send);
+$("cancel").addEventListener("click", () => post("/api/cancel", {game}));
+$("reset").addEventListener("click", () => post("/api/reset", {game}));
+for (const kind of Object.keys(CANNED)) $(kind).addEventListener("click", () => canned(kind));
+$("settings").addEventListener("click", toggleSettings);
+$("save").addEventListener("click", saveSettings);
+$("prompt").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+});
+tick();
+setInterval(tick, 2000);
+</script></body></html>

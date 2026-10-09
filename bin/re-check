@@ -4,7 +4,7 @@
 set -uo pipefail
 source "$(dirname "$(realpath "$0")")/../lib/common.sh"
 
-CHECKS=(gpu ollama anthropic ollamaconf claude ghidra mcp dotnet x64dbg memory mingw rust bepinex imhex workspace)
+CHECKS=(gpu ollama anthropic ollamaconf claude ghidra mcp dotnet x64dbg memory mingw rust bepinex imhex workspace um)
 FULL=0 GAMEDIR="" ONLY="" ARGS="$*"
 
 usage() {
@@ -152,6 +152,14 @@ check_imhex() {
         || { echo "ImHex flatpak missing (run ./setup.sh user:tools)"; return 2; }
     [[ -n "$v" ]] || { echo "ImHex flatpak missing (run ./setup.sh user:tools)"; return 2; }
     echo "ImHex $v"
+}
+
+check_um() {
+    local v libs
+    v="$(um --version 2>/dev/null)" || { echo "um missing (install universal-modder, see README)"; return 2; }
+    libs="$(timeout 20 um scan --list 2>/dev/null | grep -c .)"
+    ((libs > 0)) || { echo "$v, but um scan --list finds no Steam library"; return 1; }
+    echo "$v, $libs Steam libraries"
 }
 
 check_workspace() {

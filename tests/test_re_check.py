@@ -2,7 +2,7 @@ import re
 import unittest
 from pathlib import Path
 
-from helpers import BIN, run, tmp_home
+from helpers import BIN, make_fake, run, tmp_home
 
 
 class ReCheck(unittest.TestCase):
@@ -88,6 +88,27 @@ class ReCheck(unittest.TestCase):
         r = self.call("--only", "workspace,x64dbg")
         names = [l.split()[1] for l in r.stdout.splitlines()]
         self.assertEqual(names, ["workspace", "x64dbg"])
+
+    def fake_um(self, scan_output):
+        fake_bin = Path(self.tmp.name) / "fakebin"
+        make_fake(fake_bin, "um", f'[[ "$1" == --version ]] && echo "um 0.9"\n[[ "$1" == scan ]] && printf "%s" "{scan_output}"\nexit 0')
+        return run([BIN / "re-check", "--only", "um"], env=self.env, fake_bin=fake_bin)
+
+    def test_um_fails_without_um(self):
+        # a real um may be on the host PATH, so shadow it with one that fails
+        fake_bin = Path(self.tmp.name) / "fakebin"
+        make_fake(fake_bin, "um", "exit 127")
+        r = run([BIN / "re-check", "--only", "um"], env=self.env, fake_bin=fake_bin)
+        self.assertTrue(r.stdout.startswith("FAIL"), r.stdout)
+        self.assertIn("universal-modder", r.stdout)
+
+    def test_um_passes_with_fake(self):
+        r = self.fake_um("/mnt/x/Steam\n")
+        self.assertTrue(r.stdout.startswith("PASS"), r.stdout)
+
+    def test_um_warns_without_library(self):
+        r = self.fake_um("")
+        self.assertTrue(r.stdout.startswith("WARN"), r.stdout)
 
 
 if __name__ == "__main__":

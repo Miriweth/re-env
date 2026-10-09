@@ -45,7 +45,8 @@ check_ollama() {
     systemctl is-active --quiet ollama || { echo "ollama.service is not active (run ./setup.sh system)"; return 2; }
     local tags missing=() m
     tags="$(curl -sf -m 5 "$OLLAMA_URL/api/tags")" || { echo "no answer from $OLLAMA_URL"; return 2; }
-    for m in "${MODELS[@]}"; do grep -q "\"$m\"" <<<"$tags" || missing+=("$m"); done
+    # ollama lists an untagged pull as name:latest
+    for m in "${MODELS[@]}"; do grep -qE "\"$m(:latest)?\"" <<<"$tags" || missing+=("$m"); done
     ((${#missing[@]} == 0)) || { echo "missing models: ${missing[*]} (run ./setup.sh user:models)"; return 2; }
     echo "service active, ${#MODELS[@]} models present"
 }

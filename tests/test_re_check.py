@@ -105,6 +105,16 @@ class ReCheck(unittest.TestCase):
     def test_um_version_has_timeout(self):
         self.assertIn("timeout 10 um --version", (BIN / "re-check").read_text())
 
+    def test_ollama_accepts_latest_suffix(self):
+        # ollama lists an untagged pull as name:latest; the check must still find it
+        fake_bin = Path(self.tmp.name) / "bin"
+        make_fake(fake_bin, "systemctl", "exit 0")
+        tags = ('{"models":[{"name":"huihui_ai/qwen2.5-coder-abliterate:14b"},'
+                '{"name":"huihui_ai/qwen3-abliterated:14b"},{"name":"mannix/llama3.1-8b-abliterated:latest"}]}')
+        make_fake(fake_bin, "curl", f"printf '%s' '{tags}'")
+        r = run([BIN / "re-check", "--only", "ollama"], env=self.env, fake_bin=fake_bin)
+        self.assertTrue(r.stdout.startswith("PASS"), r.stdout)
+
     def test_um_passes_with_fake(self):
         r = self.fake_um("/mnt/x/Steam\n")
         self.assertTrue(r.stdout.startswith("PASS"), r.stdout)

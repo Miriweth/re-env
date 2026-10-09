@@ -32,12 +32,15 @@ def make_token():
     token = secrets.token_urlsafe(32)
     run_dir = os.environ.get("XDG_RUNTIME_DIR")
     path = Path(run_dir) / "re-dash.token" if run_dir and Path(run_dir).is_dir() else state.RE_HOME / ".re-dash.token"
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     try:
-        os.chmod(fd, 0o600)
-        os.write(fd, (token + "\n").encode())
-    finally:
-        os.close(fd)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        try:
+            os.chmod(fd, 0o600)
+            os.write(fd, (token + "\n").encode())
+        finally:
+            os.close(fd)
+    except OSError as e:
+        raise SystemExit(f"error: cannot write token file {path}: {e.strerror}")
     return token
 
 
@@ -63,7 +66,11 @@ def api_run(body):
     if body.get("backend") not in state.BACKENDS:
         raise Reject(400, "unknown backend")
     prompt = body.get("prompt")
-    if not isinstance(prompt, str) or not prompt or len(prompt.encode()) > MAX_BODY:
+    try:
+        size = len(prompt.encode()) if isinstance(prompt, str) else 0
+    except UnicodeEncodeError:  # lone surrogate from a \udxxx escape
+        size = 0
+    if not size or size > MAX_BODY:
         raise Reject(400, "prompt must be a non-empty string up to 16 KiB")
     try:
         return 202, {"id": manager.start(game, body["backend"], prompt)}
@@ -76,7 +83,12 @@ def api_reset(body):
     return 200, {"ok": True}
 
 
+SETTING_TYPES = {"bulk_model": str, "offline": bool, "default_backend": str}
+
+
 def api_settings(body):
+    if any(k in SETTING_TYPES and not isinstance(v, SETTING_TYPES[k]) for k, v in body.items()):
+        raise Reject(400, "wrong setting type")  # [] in ALIASES would raise TypeError
     try:
         return 200, state.save_settings(body)
     except ValueError as e:
@@ -103,8 +115,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise Reject(403)  # DNS rebinding
             route(urllib.parse.urlsplit(self.path), host)
         except Reject as e:
-            self.send_error(e.code, e.msg)
-        except (BrokenPipeError, ConnectionResetError):
+            self.send_error(e.code, None, e.msg)  # fixed reason line, message only in the escaped body
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):  # client gone; other OSErrors are 500s
             pass
         except Exception:  # never let a request kill the server
             traceback.print_exc()
@@ -129,16 +141,14 @@ class Handler(BaseHTTPRequestHandler):
     def post(self, url, host):
         if self.headers.get("Origin") != f"http://{host}":
             raise Reject(403)  # cross-site request
-        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+        if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
             raise Reject(403)  # no simple (preflight-free) cross-origin form posts
-        try:
-            length = int(self.headers.get("Content-Length") or "")
-        except ValueError:
+        cl = self.headers.get("Content-Length") or ""
+        if not (cl.isascii() and cl.isdigit()):
             raise Reject(400, "Content-Length required")
+        length = int(cl)
         if length > MAX_BODY:
             raise Reject(413)
-        if length < 0:
-            raise Reject(400)
         auth = (self.headers.get("Authorization") or "").encode()
         if not hmac.compare_digest(auth, f"Bearer {TOKEN}".encode()):
             raise Reject(403)

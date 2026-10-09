@@ -407,6 +407,67 @@ class ReDash(unittest.TestCase):
     def test_post_unknown_route(self):
         self.assertEqual(self.post(self.start(), "/api/nope", {})[0], 404)
 
+    def raw_post(self, url, path, data, **headers):
+        """POST with exactly the given headers (plus correct Host/Origin/Content-Type/token unless overridden)."""
+        port = url.rsplit(":", 1)[1]
+        hdrs = {"Host": f"127.0.0.1:{port}", "Origin": f"http://127.0.0.1:{port}",
+                "Content-Type": "application/json", "Authorization": f"Bearer {self.token}", **headers}
+        c = http.client.HTTPConnection("127.0.0.1", int(port), timeout=5)
+        c.putrequest("POST", path, skip_host=True, skip_accept_encoding=True)
+        for k, v in hdrs.items():
+            if v is not None:
+                c.putheader(k, v)
+        c.endheaders(data)
+        r = c.getresponse()
+        r.read()
+        c.close()
+        return r
+
+    def test_post_missing_content_length(self):
+        url = self.start()
+        self.assertEqual(self.raw_post(url, "/api/run", None).status, 400)
+
+    def test_post_non_digit_content_length(self):
+        url = self.start()
+        data = json.dumps(self.run_body()).encode()
+        for cl in (f"+{len(data)}", f"{len(data) // 10}_{len(data) % 10}", "-1"):
+            self.assertEqual(self.raw_post(url, "/api/run", data, **{"Content-Length": cl}).status, 400, cl)
+        time.sleep(0.2)
+        self.assertEqual(read_log(self.log), [])
+
+    def test_post_origin_null(self):
+        self.assert_rejected(403, origin="null")
+
+    def test_post_host_wrong_port(self):
+        url = self.start()
+        port = int(url.rsplit(":", 1)[1])
+        code, _ = self.post(url, "/api/run", self.run_body(), host=f"127.0.0.1:{port + 1}")
+        self.assertEqual(code, 403)
+
+    def test_post_dotdot_game(self):
+        self.assert_rejected(400, body=self.run_body(game=".."))
+
+    def test_post_content_type_exact(self):
+        self.assert_rejected(403, ctype="application/jsonx")
+
+    def test_post_content_type_with_charset(self):
+        url = self.start()
+        self.assertEqual(self.post(url, "/api/run", self.run_body(), ctype="application/json; charset=utf-8")[0], 202)
+
+    def test_post_lone_surrogate_prompt(self):
+        self.assert_rejected(400, body=b'{"game": "Elden", "backend": "claude", "prompt": "a\\ud800"}')
+
+    def test_settings_rejects_wrong_types(self):
+        url = self.start()
+        for bad in ({"bulk_model": []}, {"default_backend": {}}, {"offline": "yes"}):
+            self.assertEqual(self.post(url, "/api/settings", bad)[0], 400, bad)
+        self.assertFalse((self.re_home / "station.json").exists())
+
+    def test_error_reason_is_fixed(self):
+        url = self.start()
+        r = self.raw_post(url, "/api/settings", b'{"evil reason": 1}')
+        self.assertEqual((r.status, r.reason), (400, "Bad Request"))
+
 
 class StateUnit(unittest.TestCase):
     def setUp(self):
@@ -426,6 +487,14 @@ class StateUnit(unittest.TestCase):
             with self.assertRaises(ValueError, msg=bad):
                 state.save_settings(bad)
         self.assertFalse((Path(self.tmp.name) / "station.json").exists())
+
+    def test_make_token_unwritable_exits(self):
+        from station import server
+        with mock.patch.object(state, "RE_HOME", Path(self.tmp.name) / "missing"), \
+                mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": ""}):
+            with self.assertRaises(SystemExit) as c:
+                server.make_token()
+        self.assertIn("token", str(c.exception.code))
 
 
 if __name__ == "__main__":
